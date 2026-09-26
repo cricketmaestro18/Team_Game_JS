@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Team Game</title>
+    <link rel="stylesheet" href="style.css?v=17" />
+  </head>
+  <body>
+    <header>
+      <a href="#home" class="brand">🏏 Team Game</a>
+      <button
+        id="menu-toggle"
+        class="menu-toggle"
+        type="button"
+        aria-label="Open navigation menu"
+        aria-expanded="false"
+        aria-controls="main-nav"
+      >
+        <span></span><span></span><span></span>
+      </button>
+      <nav id="main-nav" aria-label="Main navigation">
+        <button data-page="home">Home</button>
+        <button data-page="profile">Profile</button>
+        <button data-page="admin" id="admin-nav" hidden>Admin</button>
+        <span id="account-tools"></span>
+      </nav>
+    </header>
+    <main id="app"></main>
+    <template id="draft-template"
+      ><button class="screen-back-link" data-page="home">← Home</button><section class="screen-intro draft-screen-intro"><div><p class="eyebrow">TEAM DRAFT</p>
+      <h1>Build your cricket team</h1><p>Take turns drafting your cricket dream team from the official player list, then see who wins each role.</p></div><span class="screen-intro-icon" aria-hidden="true">🏏</span></section>
+      <section class="card setup-card"><div class="setup-card-heading"><span class="setup-step">01</span><div><h2>Set up your draft</h2><p>Choose your format and add everyone playing.</p></div></div>
+        <form id="draft-form">
+          <label
+            >Draft type<select name="type">
+              <option value="six">Six roles</option>
+              <option value="xi">Playing XI</option>
+            </select></label
+          ><label
+            >Participant names
+            <input name="players" placeholder="Asha, Ravi" required /></label
+          ><button>Start draft</button>
+        </form>
+      </section></template
+    ><template id="stats-template">
+      <button class="screen-back-link" data-page="home">← Home</button>
+      <section class="screen-intro stats-screen-intro">
+        <div>
+          <p class="eyebrow">STATS WINNER</p>
+          <h1>Closest to the target wins</h1>
+          <p>Choose a cricket format and stat category, set your target, and compare player totals.</p>
+        </div>
+        <span class="screen-intro-icon" aria-hidden="true">📈</span>
+      </section>
+      <section class="card setup-card">
+        <div class="setup-card-heading">
+          <span class="setup-step">01</span>
+          <div>
+            <h2>Set up your challenge</h2>
+            <p>Pick your category, target, teams, and slots.</p>
+          </div>
+        </div>
+        <form id="stats-form">
+          <label>
+            Number of teams
+            <input type="number" name="players" min="2" max="12" value="2" inputmode="numeric" required />
+          </label>
+          <div id="stats-team-names" class="team-name-fields" aria-live="polite">
+            <p class="team-name-fields-title">Name each team</p>
+            <label>Team 1<input name="teamNames" value="Team 1" maxlength="60" autocomplete="off" required /></label>
+            <label>Team 2<input name="teamNames" value="Team 2" maxlength="60" autocomplete="off" required /></label>
+          </div>
+          <p class="team-name-help">These names are fixed once the game starts.</p>
+          <label>
+            Criteria
+            <select name="criteria">
+              <option>Intl Runs</option>
+              <option>Intl Wickets</option>
+              <option>IPL Runs</option>
+              <option>IPL Wickets</option>
+            </select>
+          </label>
+          <label>
+            Target limit
+            <input type="number" name="limit" min="0" required />
+          </label>
+          <label>
+            Number of slots
+            <input type="number" name="slots" min="1" max="20" value="11" inputmode="numeric" required />
+          </label>
+          <button type="submit">Continue to player names</button>
+        </form>
+      </section>
+    </template>
+    <script type="module" src="app.js?v=17"></script>
+  </body>
+</html>

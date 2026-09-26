@@ -1,0 +1,13 @@
+{
+  "themes": [],
+  "active": {
+    "owner": "c292f396-3199-4197-9610-e3aff4a754b1",
+    "colors": {
+      "bg": "#101329",
+      "surface": "#202440",
+      "text": "#edf0ff",
+      "accent": "#4d92ff",
+      "accent2": "#2f67bb"
+    }
+  }
+}
