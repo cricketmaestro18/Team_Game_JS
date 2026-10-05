@@ -1241,3 +1241,256 @@ select {
 
 .setup-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 18px; }
 .setup-actions .secondary-button { background: var(--surface); border: 1px solid var(--line); color: var(--text); }
+
+/* Chase Master */
+.chase-launch,
+.chase-launch:hover,
+.chase-launch:focus-visible {
+  background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent2) 45%, transparent), transparent 42%), var(--surface);
+  color: var(--text);
+}
+.game-launch-card.chase-launch:hover,
+.game-launch-card.chase-launch:focus-visible {
+  background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 60%, transparent), transparent 58%), color-mix(in srgb, var(--accent) 20%, var(--surface));
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 18px 44px #0005, 0 0 28px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.game-launch-card.chase-launch:active {
+  background: color-mix(in srgb, var(--accent) 27%, var(--surface));
+}
+/* Give all game launch cards an equally clear interactive highlight. */
+.game-launch-card.draft-launch:hover,
+.game-launch-card.draft-launch:focus-visible {
+  background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 60%, transparent), transparent 58%), color-mix(in srgb, var(--accent) 20%, var(--surface));
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 18px 44px #0005, 0 0 28px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.game-launch-card.draft-launch:active {
+  background: color-mix(in srgb, var(--accent) 27%, var(--surface));
+}
+.game-launch-card.stats-launch:hover,
+.game-launch-card.stats-launch:focus-visible {
+  background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent2) 65%, transparent), transparent 58%), color-mix(in srgb, var(--accent2) 22%, var(--surface));
+  border-color: var(--accent2);
+  outline: 2px solid color-mix(in srgb, var(--accent2) 72%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 18px 44px #0005, 0 0 28px color-mix(in srgb, var(--accent2) 27%, transparent);
+}
+.game-launch-card.stats-launch:active {
+  background: color-mix(in srgb, var(--accent2) 30%, var(--surface));
+}
+.chase-launch .game-card-icon { background: color-mix(in srgb, var(--accent2) 26%, var(--surface)); }
+.chase-launch .game-card-tag,
+.chase-launch .game-card-action { color: var(--accent); }
+.chase-team-select-grid,
+.chase-pick-grid,
+.chase-final-cards,
+.chase-result-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.chase-team-select-grid label { display: grid; gap: 8px; }
+.chase-loading { display: flex; align-items: center; gap: 14px; }
+.chase-loader { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-right-color: var(--accent2); border-radius: 50%; animation: cricket-loader-spin .8s linear infinite; }
+.chase-pick-team { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.chase-pick-heading, .chase-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.chase-pick-heading h2, .chase-section-title h2 { margin: 0; font-size: 1.12rem; }
+.chase-pick-heading span, .chase-section-title > span { color: var(--muted); font-size: .82rem; }
+.chase-squad-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 540px; overflow: auto; padding: 2px; }
+.chase-player-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); text-align: left; }
+.chase-player-pick > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.chase-player-pick b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; }
+.chase-player-pick small { color: var(--muted); font-size: .72rem; text-transform: capitalize; }
+.chase-player-pick .pick-check { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: var(--surface); color: var(--accent); }
+.chase-player-pick.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--surface)); }
+.chase-player-pick.selected .pick-check { background: var(--accent); color: var(--bg); }
+.chase-lineup-footer { position: sticky; bottom: 10px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; box-shadow: 0 8px 24px #0003; }
+.chase-lineup-footer p { margin: 0; }
+.chase-lineup-footer button:disabled { cursor: not-allowed; opacity: .5; }
+.chase-match-intro { margin-bottom: 18px; }
+.chase-layout { display: grid; grid-template-columns: minmax(350px, .95fr) minmax(460px, 1.05fr); align-items: start; gap: 18px; }
+.chase-score-column, .chase-scorecards { display: grid; gap: 16px; min-width: 0; }
+.chase-score-panel { padding: 16px; overflow: hidden; }
+.chase-metrics { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; border: 1px solid var(--line); }
+.chase-metrics > div { display: grid; gap: 5px; padding: 10px 6px; }
+.chase-metrics small, .chase-win-prob small, .chase-striker-area > small, .chase-section-title small, .chase-result-highlights small { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .07em; }
+.chase-metrics b { font-size: 1.2rem; }
+.chase-metrics .target-metric { background: color-mix(in srgb, var(--accent) 15%, var(--surface)); color: var(--accent); }
+.chase-win-prob { padding: 12px 4px 8px; }
+.chase-win-prob > div:first-child { display: flex; align-items: center; justify-content: space-between; }
+.chase-win-prob > div:first-child b { color: var(--accent); }
+.chase-prob-track { height: 10px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: var(--bg); }
+.chase-prob-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff315b, #ffab00, var(--accent)); transition: width .25s ease; }
+.chase-big-score { position: relative; display: grid; justify-items: center; gap: 8px; padding: 16px; background: color-mix(in srgb, var(--bg) 74%, var(--surface)); }
+.chase-big-score strong { font-size: clamp(2.3rem, 6vw, 3.3rem); line-height: 1; }
+.chase-big-score strong i { color: var(--muted); font-size: .6em; font-style: normal; }
+.chase-big-score strong em { color: #ff315b; font-size: .65em; font-style: normal; }
+.chase-big-score > small { padding: 4px 8px; background: var(--bg); color: var(--text); font-size: .75rem; font-weight: 800; }
+.chase-ball-badge { position: absolute; top: 18px; right: 14%; display: grid; place-items: center; width: 52px; height: 52px; border: 4px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--accent); font-weight: 800; }
+.chase-quick { padding-top: 14px; }
+.chase-quick-title { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0 10px; }
+.chase-quick-title small { color: var(--muted); font-size: .75rem; font-weight: 800; }
+.chase-quick-title b { color: var(--accent); text-align: right; }
+.chase-mini-head, .chase-mini-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, minmax(22px, .18fr)); align-items: center; gap: 4px; }
+.chase-mini-head { padding: 7px 5px; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--muted); text-align: right; font-size: .7rem; }
+.chase-mini-head span:first-child, .chase-mini-row b { text-align: left; }
+.chase-mini-row { padding: 8px 5px; font-size: .78rem; text-align: right; }
+.chase-mini-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chase-bowling-head { margin-top: 6px; }
+.chase-partnership { margin: 8px 0 0; padding: 10px; background: var(--bg); }
+.chase-partnership b { color: var(--accent); }
+.chase-striker-area { display: grid; gap: 8px; margin-top: 14px; text-align: center; }
+.chase-striker-area > div { display: flex; justify-content: center; gap: 8px; }
+.chase-striker-choice { border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.chase-striker-choice.active { border-color: var(--accent); color: var(--accent); }
+.chase-shot-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.chase-shot-controls button { min-height: 54px; font-size: 1rem; font-weight: 800; }
+.chase-shot-controls .safe-shot { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+.chase-shot-controls .aggressive-shot { background: #f15b42; color: white; }
+.chase-shot-note { margin: 8px 0 0; color: var(--muted); text-align: center; font-size: .76rem; }
+.chase-order-card { padding: 16px; }
+.chase-section-title { align-items: end; }
+.chase-section-title small { display: block; margin-bottom: 4px; }
+.chase-section-title > b { color: var(--accent); font-size: 1.25rem; }
+.chase-order-card ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin: 0; padding-left: 28px; }
+.chase-order-card li { padding: 6px 2px; }
+.chase-order-card li.on-strike { color: var(--accent); font-weight: 800; }
+.chase-order-card li.dismissed { color: var(--muted); text-decoration: line-through; }
+.chase-order-buttons { display: inline-flex; gap: 3px; margin-left: 4px; }
+.chase-order-buttons button { min-width: 26px; padding: 2px 5px; }
+.chase-order-buttons button:disabled { opacity: .35; }
+.chase-table-wrap { overflow-x: auto; }
+.chase-scorecard { padding: 16px; min-width: 0; }
+.chase-scorecard table, .chase-final-cards table { min-width: 520px; }
+.chase-scorecard td, .chase-scorecard th, .chase-final-cards td, .chase-final-cards th { padding: 9px 7px; white-space: nowrap; }
+.chase-scorecard td:first-child, .chase-scorecard th:first-child { min-width: 150px; text-align: left; }
+.chase-scorecard tr.on-strike td:first-child::before { content: "● "; color: var(--accent); font-size: .7em; }
+.chase-scorecard .current-bowler td:first-child { color: var(--accent); font-weight: 800; }
+.chase-result-card { max-width: 780px; margin: 0 auto 18px; text-align: center; }
+.chase-result-kicker { color: var(--accent); font-size: .78rem; font-weight: 900; letter-spacing: .12em; }
+.chase-result-card > h2 { font-size: clamp(1.6rem, 4vw, 2.5rem); }
+.chase-result-highlights article { display: grid; gap: 7px; padding: 18px; border: 1px solid var(--line); text-align: left; }
+.chase-result-highlights article strong { color: var(--accent); font-size: 2rem; }
+.chase-result-score { margin: 18px 0; font-size: 1.4rem; font-weight: 900; }
+.chase-result-score small { color: var(--muted); }
+.chase-final-cards { align-items: start; }
+@media (max-width: 900px) {
+  .chase-layout { grid-template-columns: minmax(0, 1fr); }
+  .chase-scorecards { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 650px) {
+  .chase-team-select-grid, .chase-pick-grid, .chase-final-cards, .chase-result-highlights { grid-template-columns: minmax(0, 1fr); }
+  .chase-pick-team { padding: 12px; }
+  .chase-squad-list { grid-template-columns: minmax(0, 1fr); max-height: 390px; }
+  .chase-lineup-footer { position: sticky; bottom: 6px; align-items: stretch; flex-direction: column; padding: 14px; }
+  .chase-lineup-footer button { width: 100%; }
+  .chase-score-panel, .chase-order-card, .chase-scorecard { padding: 12px; }
+  .chase-ball-badge { right: 7%; width: 44px; height: 44px; }
+  .chase-order-card ol { grid-template-columns: minmax(0, 1fr); }
+  .chase-shot-controls button { min-height: 58px; }
+  .chase-section-title { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .chase-loader { animation: none; } }
+.chase-striker-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px !important; }
+.chase-striker-choice:disabled { cursor: not-allowed; opacity: .55; }
+@media (max-width: 650px) { .chase-striker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+
+/* Chase Master history */
+.chase-history-details { display: grid; gap: 16px; margin-top: 22px; }
+.chase-history-fixture { margin: 0; font-size: clamp(1.05rem, 2vw, 1.3rem); }
+.chase-history-fixture span { color: var(--muted); font-weight: 500; }
+.chase-history-result { margin: 0; }
+.chase-history-result.is-win { background: color-mix(in srgb, var(--accent) 19%, var(--surface)); }
+.chase-history-result.is-loss { background: color-mix(in srgb, #e34f62 15%, var(--surface)); }
+.chase-history-scoreline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--surface) 86%, var(--bg)); }
+.chase-history-scoreline > div { display: grid; gap: 3px; padding: 16px 18px; }
+.chase-history-scoreline > div + div { border-left: 1px solid var(--line); }
+.chase-history-scoreline small, .chase-history-highlights > article > small { color: var(--muted); font-size: .72rem; font-weight: 850; letter-spacing: .08em; }
+.chase-history-scoreline b { color: var(--accent); font-size: 1.6rem; }
+.chase-history-scoreline b i { color: var(--text); font-size: .75em; font-style: normal; }
+.chase-history-scoreline span { color: var(--muted); font-size: .84rem; }
+.chase-history-highlights .history-team { padding: 16px; }
+.chase-history-highlights .history-team h4 { margin: 4px 0; font-size: 1.05rem; }
+.chase-history-highlights .history-team p { margin: 0; color: var(--muted); }
+.chase-history-highlights .history-team p strong { color: var(--text); }
+.chase-history-scorecards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.chase-history-card { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 85%, var(--bg)); }
+.chase-history-card h4 { margin: 0 0 10px; color: var(--accent); }
+.chase-history-table-wrap { overflow-x: auto; }
+.chase-history-card table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.chase-history-card th, .chase-history-card td { padding: 8px 7px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.chase-history-card th { color: var(--muted); font-size: .75rem; }
+.chase-history-card th:first-child, .chase-history-card td:first-child { text-align: left; }
+.chase-history-card td:first-child { font-weight: 650; }
+.chase-history-card td small { color: var(--muted); font-weight: 400; }
+@media (max-width: 720px) {
+  .chase-history-scorecards { grid-template-columns: minmax(0, 1fr); }
+  .chase-history-scoreline > div { padding: 13px; }
+}
+
+
+/* Player portraits */
+.player-avatar { position: relative; display: inline-grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 50%; background: color-mix(in srgb, var(--accent) 17%, var(--surface)); color: var(--accent); font-size: .75rem; font-weight: 850; vertical-align: middle; }
+.player-avatar > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; opacity: 0; transition: opacity .2s ease; }
+.player-avatar > img.loaded { opacity: 1; }
+.player-avatar.small { width: 34px; height: 34px; flex-basis: 34px; font-size: .66rem; }
+.player-avatar.tiny { width: 25px; height: 25px; flex-basis: 25px; font-size: .56rem; }
+.player-identity { display: inline-flex; min-width: 0; align-items: center; gap: 8px; vertical-align: middle; }
+.player-banner { display: flex; align-items: center; gap: 12px; }
+.draft-winner-player { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.chase-picker-identity { display: flex; min-width: 0; align-items: center; gap: 9px; }
+.chase-picker-identity > span:last-child { display: grid; min-width: 0; gap: 3px; }
+.chase-striker-choice { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.chase-striker-choice .player-avatar { flex: 0 0 34px; }
+.chase-mini-row b.player-identity { display: flex; gap: 5px; }
+.chase-mini-row .player-avatar.tiny { width: 22px; height: 22px; flex-basis: 22px; }
+
+/* A vertical, touch-friendly batting lineup */
+.chase-order-card ol.chase-batting-order { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chase-batter-card { display: grid; grid-template-columns: 34px 34px minmax(0, 1fr) 26px; align-items: center; gap: 10px; min-height: 60px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--bg) 68%, var(--surface)); cursor: grab; transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease; touch-action: pan-y; }
+.chase-batter-card:hover { border-color: color-mix(in srgb, var(--accent) 65%, var(--line)); transform: translateY(-1px); }
+.chase-batter-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chase-batter-card.on-strike { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, var(--surface)); }
+.chase-batter-card.dragging { opacity: .45; transform: scale(.98); box-shadow: 0 12px 28px #0004; }
+.chase-batter-card.dismissed { opacity: .6; text-decoration: line-through; }
+.chase-batter-position { color: var(--muted); font-size: .75rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.chase-batter-name { display: grid; min-width: 0; gap: 2px; font-weight: 750; }
+.chase-batter-name small { color: var(--muted); font-size: .72rem; font-weight: 550; text-decoration: none; }
+.chase-batter-card.on-strike .chase-batter-name small { color: var(--accent); }
+.chase-drag-grip { color: var(--muted); font-size: 1.35rem; line-height: 1; text-align: center; cursor: grab; touch-action: none; user-select: none; }
+.chase-batter-card[draggable="false"] { cursor: default; }
+.chase-batter-card[draggable="false"] .chase-drag-grip { opacity: .35; }
+@media (prefers-reduced-motion: reduce) {
+  .player-avatar > img, .chase-batter-card { transition: none; }
+}
+
+
+/* Larger portraits where players are being picked */
+.player-avatar.draft { width: 58px; height: 58px; flex-basis: 58px; font-size: .9rem; }
+.player-avatar.featured { width: 112px; height: 112px; flex-basis: 112px; font-size: 1.25rem; }
+.player-avatar.squad { width: 54px; height: 54px; flex-basis: 54px; font-size: .86rem; }
+.player-avatar.striker { width: 64px; height: 64px; flex-basis: 64px; font-size: 1rem; }
+.player-banner { gap: 16px; }
+.player-banner > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.chase-player-pick { min-height: 82px; }
+.chase-striker-choice { min-height: 102px; flex-direction: column; gap: 5px; }
+@media (max-width: 650px) {
+  .player-avatar.featured { width: 96px; height: 96px; flex-basis: 96px; }
+  .player-avatar.draft { width: 50px; height: 50px; flex-basis: 50px; }
+  .player-avatar.squad { width: 46px; height: 46px; flex-basis: 46px; }
+  .player-avatar.striker { width: 58px; height: 58px; flex-basis: 58px; }
+  .chase-player-pick { min-height: 74px; }
+  .chase-striker-choice { min-height: 98px; }
+}
+
+
+/* Portraits in Stats Winner and saved Chase scorecards */
+#stats-result .player-identity { gap: 9px; }
+.history-player-list .player-avatar.small { width: 40px; height: 40px; flex-basis: 40px; }
+.chase-final-cards .player-identity { gap: 7px; }
+.chase-final-cards .player-avatar.tiny { width: 25px; height: 25px; flex-basis: 25px; }
+
+.draft-awarded-to { min-width: 120px; color: var(--accent); font-weight: 800; white-space: nowrap; }
+.draft-awarded-to strong { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }

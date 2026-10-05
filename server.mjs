@@ -564,6 +564,228 @@ async function statFromCricinfo(player, criteria) {
   return statFromStatsguru(html, criteria);
 }
 
+const cricbuzzPlayerImageCache = new Map();
+let activePlayerImageLookups = 0;
+const playerImageResponseCache = new Map();
+const waitingPlayerImageLookups = [];
+
+async function withPlayerImageLookup(task) {
+  if (activePlayerImageLookups >= 4) await new Promise((resolve) => waitingPlayerImageLookups.push(resolve));
+  activePlayerImageLookups += 1;
+  try { return await task(); }
+  finally {
+    activePlayerImageLookups -= 1;
+    waitingPlayerImageLookups.shift()?.();
+  }
+}
+
+async function googlePlayerImageUrl(playerName) {
+  const url = new URL("https://www.google.com/search");
+  url.search = new URLSearchParams({ tbm: "isch", q: `${playerName} cricketer portrait`, hl: "en", gl: "in" }).toString();
+  try {
+    const response = await withPlayerImageLookup(() => fetch(url, {
+      headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36", accept: "text/html", "accept-language": "en-US,en;q=0.9" },
+      signal: AbortSignal.timeout(7000),
+    }));
+    if (!response.ok) return null;
+    const html = (await response.text()).replace(/\\u003d|\u003d|\\x3d/gi, "=").replace(/\\u0026|\u0026|\\x26/gi, "&").replace(/\\\//g, "/").replace(/&amp;/g, "&");
+    const target = normalizePlayerName(playerName);
+    const candidates = [];
+    for (const [, tag] of html.matchAll(/<img\b[^>]*>/gi)) {
+      const source = tag.match(/(?:src|data-src)=(["'])(.*?)\1/i)?.[2];
+      const alt = tag.match(/alt=(["'])(.*?)\1/i)?.[2] || "";
+      if (!source || !/encrypted-tbn\d*\.gstatic\.com/i.test(source)) continue;
+      const score = playerNameSimilarity(playerName, alt.replace(/<[^>]*>/g, " "));
+      candidates.push({ source, score: score >= 0.55 ? score + 2 : score });
+    }
+    const pattern = /https?:\/\/encrypted-tbn\d*\.gstatic\.com\/images[^"'<>\s\\]+/gi;
+    for (const match of html.matchAll(pattern)) {
+      const context = normalizePlayerName(html.slice(Math.max(0, match.index - 500), match.index + 180));
+      const words = target.split(" ").filter((word) => context.includes(word));
+      candidates.push({ source: match[0], score: words.length === target.split(" ").length ? 1 : 0.1 });
+    }
+    const image = candidates.sort((a, b) => b.score - a.score)[0]?.source;
+    if (!image) return null;
+    const imageUrl = new URL(image.replace(/\\u003d|\u003d|\\x3d/gi, "=").replace(/\\u0026|\u0026|\\x26/gi, "&"));
+    return /^encrypted-tbn\d*\.gstatic\.com$/.test(imageUrl.hostname) ? imageUrl.href : null;
+  } catch { return null; }
+}
+
+async function wikipediaPlayerImageUrl(playerName) {
+  const url = new URL("https://en.wikipedia.org/w/api.php");
+  url.search = new URLSearchParams({
+    action: "query", generator: "search", gsrsearch: `"${playerName}" cricket`,
+    gsrnamespace: "0", gsrlimit: "8", prop: "pageimages", piprop: "thumbnail",
+    pithumbsize: "320", format: "json",
+  }).toString();
+  try {
+    const response = await withPlayerImageLookup(() => fetch(url, {
+      headers: { "user-agent": "TeamGame/1.0 (cricket player portrait lookup)", accept: "application/json" },
+      signal: AbortSignal.timeout(7000),
+    }));
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const pages = Object.values(payload.query?.pages || {});
+    const matches = pages.map((page) => {
+      const title = page.title.replace(/\s*\([^)]*\)\s*$/, "");
+      return { page, score: playerNameSimilarity(playerName, title) };
+    }).filter(({ page, score }) => score >= 0.82 && page.thumbnail?.source)
+      .sort((a, b) => b.score - a.score);
+    const source = matches[0]?.page.thumbnail.source;
+    if (!source) return null;
+    const imageUrl = new URL(source);
+    return ["thumb.wikimedia.org", "upload.wikimedia.org"].includes(imageUrl.hostname) ? imageUrl.href : null;
+  } catch { return null; }
+}
+
+async function commonsPlayerImageUrl(playerName) {
+  const url = new URL("https://commons.wikimedia.org/w/api.php");
+  url.search = new URLSearchParams({
+    action: "query", generator: "search", gsrsearch: `filetype:bitmap \"${playerName}\" cricket`,
+    gsrnamespace: "6", gsrlimit: "10", prop: "imageinfo", iiprop: "url",
+    iiurlwidth: "320", format: "json",
+  }).toString();
+  try {
+    const response = await withPlayerImageLookup(() => fetch(url, {
+      headers: { "user-agent": "TeamGame/1.0 (cricket player portrait lookup)", accept: "application/json" },
+      signal: AbortSignal.timeout(7000),
+    }));
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const name = normalizePlayerName(playerName);
+    const rejectTerms = /\b(and|team|squad|fans|fan|logo|jersey|shirt|bat|stadium|match|statue|museum|poster)\b/i;
+    const matches = Object.values(payload.query?.pages || {}).map((page) => {
+      const fileName = page.title.replace(/^File:/i, "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
+      const normalized = normalizePlayerName(fileName);
+      const imageUrl = page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url;
+      return { normalized, fileName, imageUrl };
+    }).filter((item) => item.normalized.includes(name) && !rejectTerms.test(item.fileName) && item.imageUrl)
+      .sort((a, b) => a.normalized.length - b.normalized.length);
+    const source = matches[0]?.imageUrl;
+    if (!source) return null;
+    const imageUrl = new URL(source);
+    return ["thumb.wikimedia.org", "upload.wikimedia.org"].includes(imageUrl.hostname) ? imageUrl.href : null;
+  } catch { return null; }
+}
+
+async function legacyPlayerPortraitUrl(playerName) {
+  const key = normalizePlayerName(playerName);
+  try {
+    const response = await withPlayerImageLookup(() => fetch(`https://www.cricbuzz.com/api/player-search/${encodeURIComponent(playerName)}`, {
+      headers: { ...requestHeaders, accept: "application/json", referer: "https://www.cricbuzz.com/profiles/" },
+      signal: AbortSignal.timeout(9000),
+    }));
+    if (response.ok) {
+      const payload = await response.json();
+      const players = Array.isArray(payload.player) ? payload.player : [];
+      const exact = players.find((candidate) => normalizePlayerName(candidate.name) === key);
+      const bestMatch = players.map((candidate) => ({ candidate, score: playerNameSimilarity(playerName, candidate.name) })).sort((a, b) => b.score - a.score)[0];
+      const player = exact || (bestMatch?.score >= 0.78 ? bestMatch.candidate : null);
+      // Cricbuzz uses 182026 as a shared blank-avatar portrait.
+      if (player?.faceImageId && String(player.faceImageId) !== "182026") {
+        return `https://static.cricbuzz.com/a/img/v1/256x256/i1/c${encodeURIComponent(player.faceImageId)}/i.jpg`;
+      }
+    }
+  } catch { /* Continue to independent public portrait sources. */ }
+  return await wikipediaPlayerImageUrl(playerName) || await commonsPlayerImageUrl(playerName);
+}
+
+async function playerPortraitUrl(playerName) {
+  const key = normalizePlayerName(playerName);
+  if (!key) return null;
+  const cached = cricbuzzPlayerImageCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+  const lookup = (async () => {
+    const googleImage = await googlePlayerImageUrl(playerName);
+    if (googleImage) return googleImage;
+    return legacyPlayerPortraitUrl(playerName);
+  })();
+  const promise = lookup.then((imageUrl) => {
+    cricbuzzPlayerImageCache.set(key, { promise: Promise.resolve(imageUrl), expiresAt: Date.now() + (imageUrl ? 6 * 60 * 60 * 1000 : 5 * 60 * 1000) });
+    return imageUrl;
+  }).catch(() => null);
+  cricbuzzPlayerImageCache.set(key, { promise, expiresAt: Date.now() + 30_000 });
+  return promise;
+}
+
+const chaseSquadsFile = join(root, "server/chase-squads.json");
+const chaseSquadTeams = [
+  "Chennai Super Kings", "Delhi Capitals", "Gujarat Titans", "Royal Challengers Bengaluru",
+  "Punjab Kings", "Kolkata Knight Riders", "Sunrisers Hyderabad", "Rajasthan Royals",
+  "Lucknow Super Giants", "Mumbai Indians",
+];
+let chaseSquadsCache = null;
+let chaseSquadsCacheUntil = 0;
+
+function articleText(html) {
+  return html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(?:p|div|h[1-6]|li|section|article|tr)>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .split("\n")
+    .map((line) => clean(line))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function scrapeCricbuzzSquads(html, fallback) {
+  const text = articleText(html);
+  const roleByPlayer = new Map(fallback.teams.flatMap((team) => team.players.map((player) => [normalizePlayerName(player.name), player.role])));
+  const teamStarts = chaseSquadTeams.map((name) => ({ name, index: text.indexOf(name, Math.max(0, text.indexOf("Current squads"))) })).sort((a, b) => a.index - b.index);
+  const foundTeams = [];
+  const auctionRoles = [
+    ["Batters", "batter"], ["Wicketkeepers", "wicketkeeper"], ["Allrounders", "allrounder"],
+    ["Spinners", "bowler"], ["Pacers", "bowler"],
+  ];
+  for (let i = 0; i < teamStarts.length; i += 1) {
+    const start = teamStarts[i];
+    if (start.index < 0) continue;
+    const end = teamStarts.slice(i + 1).find((team) => team.index > start.index)?.index ?? text.length;
+    const section = text.slice(start.index + start.name.length, end);
+    const names = new Map();
+    const retention = section.match(/Retentions\s*:\s*([\s\S]*?)(?=Auction Buys|Purse Remaining|$)/i)?.[1] || "";
+    for (const rawName of retention.split(",")) {
+      const playerName = rawName.replace(/\([^)]*\)/g, "").replace(/[.;\s]+$/g, "").trim();
+      if (playerName) names.set(playerName, roleByPlayer.get(normalizePlayerName(playerName)) || "batter");
+    }
+    for (let roleIndex = 0; roleIndex < auctionRoles.length; roleIndex += 1) {
+      const [label, role] = auctionRoles[roleIndex];
+      const nextLabels = auctionRoles.slice(roleIndex + 1).map(([nextLabel]) => nextLabel).join("|");
+      const expression = new RegExp(`${label}\\s*:\\s*([\\s\\S]*?)(?=${nextLabels ? `${nextLabels}|` : ""}Purse Remaining|Overseas slots|$)`, "i");
+      const values = section.match(expression)?.[1] || "";
+      for (const item of values.split(",")) {
+        const playerName = item.replace(/\([^)]*\)/g, "").replace(/[.;\s]+$/g, "").trim();
+        if (playerName && !/^nil$/i.test(playerName)) names.set(playerName, role);
+      }
+    }
+    const players = [...names].map(([name, role]) => ({ name, role }));
+    if (players.length >= 20 && players.length <= 28 && players.filter((player) => player.role === "bowler" || player.role === "allrounder").length >= 5) {
+      foundTeams.push({ name: start.name, players });
+    }
+  }
+  if (foundTeams.length !== 10) throw new Error(`Cricbuzz squad page returned ${foundTeams.length} complete teams`);
+  return { season: 2026, source: "Cricbuzz IPL 2026 squad article", teams: foundTeams };
+}
+
+async function getChaseSquads() {
+  const now = Date.now();
+  if (chaseSquadsCache && now < chaseSquadsCacheUntil) return chaseSquadsCache;
+  const fallback = JSON.parse(await readFile(chaseSquadsFile, "utf8"));
+  try {
+    const response = await fetch("https://www.cricbuzz.com/cricket-news/136914/ipl-2026-auction-current-squads-purse-remaining", {
+      headers: { ...requestHeaders, referer: "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/squads" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) throw new Error(`Cricbuzz returned HTTP ${response.status}`);
+    chaseSquadsCache = scrapeCricbuzzSquads(await response.text(), fallback);
+    chaseSquadsCacheUntil = now + 6 * 60 * 60 * 1000;
+  } catch {
+    chaseSquadsCache = fallback;
+    chaseSquadsCacheUntil = now + 10 * 60 * 1000;
+  }
+  return chaseSquadsCache;
+}
+
 function sendJson(res, status, payload) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
@@ -661,6 +883,38 @@ createServer(async (req, res) => {
       return sendJson(res, 200, { updated: true });
     } catch (error) { return sendJson(res, 400, { error: error.message || "Invalid password request." }); }
   }
+  if (url.pathname === "/api/player-image" && req.method === "GET") {
+    const playerName = (url.searchParams.get("name") || "").trim().slice(0, 100);
+    if (!playerName) { res.writeHead(204); return res.end(); }
+    let imageUrl = await playerPortraitUrl(playerName);
+    if (!imageUrl) { res.writeHead(204, { "Cache-Control": "public, max-age=300" }); return res.end(); }
+    const loadImage = async (source) => {
+      const parsed = new URL(source);
+      const allowedHost = /^(?:encrypted-tbn\d*\.gstatic\.com|static\.cricbuzz\.com|thumb\.wikimedia\.org|upload\.wikimedia\.org)$/i.test(parsed.hostname);
+      if (!allowedHost) throw new Error("Unsupported player image host");
+      const response = await fetch(parsed, { headers: { ...requestHeaders, referer: parsed.hostname.endsWith("gstatic.com") ? "https://www.google.com/" : "https://www.cricbuzz.com/" }, signal: AbortSignal.timeout(9000) });
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok || !contentType.startsWith("image/")) throw new Error("Player image unavailable");
+      return { body: Buffer.from(await response.arrayBuffer()), contentType, expiresAt: Date.now() + 6 * 60 * 60 * 1000 };
+    };
+    let image = playerImageResponseCache.get(imageUrl);
+    if (!image || image.expiresAt <= Date.now()) {
+      try { image = await loadImage(imageUrl); }
+      catch {
+        if (!new URL(imageUrl).hostname.endsWith("gstatic.com")) { res.writeHead(204, { "Cache-Control": "public, max-age=300" }); return res.end(); }
+        imageUrl = await legacyPlayerPortraitUrl(playerName);
+        if (!imageUrl) { res.writeHead(204, { "Cache-Control": "public, max-age=300" }); return res.end(); }
+        const playerKey = normalizePlayerName(playerName);
+        cricbuzzPlayerImageCache.set(playerKey, { promise: Promise.resolve(imageUrl), expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+        try { image = await loadImage(imageUrl); }
+        catch { res.writeHead(204, { "Cache-Control": "public, max-age=300" }); return res.end(); }
+      }
+      if (playerImageResponseCache.size >= 100) playerImageResponseCache.delete(playerImageResponseCache.keys().next().value);
+      playerImageResponseCache.set(imageUrl, image);
+    }
+    res.writeHead(200, { "Content-Type": image.contentType, "Content-Length": image.body.length, "Cache-Control": "public, max-age=21600", "X-Content-Type-Options": "nosniff" });
+    return res.end(image.body);
+  }
   if (url.pathname === "/api/draft-players" && req.method === "GET") {
     res.setHeader("Cache-Control", "no-store");
     try {
@@ -671,14 +925,22 @@ createServer(async (req, res) => {
       return sendJson(res, 500, { error: "The draft player list is unavailable." });
     }
   }
+  if (url.pathname === "/api/chase-squads" && req.method === "GET") {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      return sendJson(res, 200, await getChaseSquads());
+    } catch {
+      return sendJson(res, 503, { error: "IPL squads are currently unavailable." });
+    }
+  }
   if (url.pathname === "/api/history" && req.method === "GET")
     return sendJson(res, 200, { games: store.history.filter((game) => canSeeGame(user, game)).sort((a, b) => b.playedAt.localeCompare(a.playedAt)) });
   if (url.pathname === "/api/history" && req.method === "POST") {
     try {
       const body = await requestBody(req);
-      if (!["draft", "stats"].includes(body.type) || !body.data || typeof body.data !== "object")
+      if (!["draft", "stats", "chase"].includes(body.type) || !body.data || typeof body.data !== "object")
         return sendJson(res, 400, { error: "Invalid game record." });
-      const game = { id: randomUUID(), owner: user.username, type: body.type, title: String(body.title || (body.type === "draft" ? "Team Draft" : "Stats Winner")), participants: Array.isArray(body.participants) ? body.participants.map(String).slice(0, 50) : [], status: "complete", playedAt: new Date().toISOString(), data: body.data };
+      const game = { id: randomUUID(), owner: user.username, type: body.type, title: String(body.title || (body.type === "draft" ? "Team Draft" : body.type === "chase" ? "Chase Master" : "Stats Winner")), participants: Array.isArray(body.participants) ? body.participants.map(String).slice(0, 50) : [], status: "complete", playedAt: new Date().toISOString(), data: body.data };
       store.history.push(game); await saveStore();
       return sendJson(res, 201, { game });
     } catch (error) { return sendJson(res, 400, { error: error.message || "Invalid game record." }); }
@@ -817,5 +1079,5 @@ createServer(async (req, res) => {
     res.end("Not found");
   }
 }).listen(Number(process.env.PORT || 8001), "0.0.0.0", () => {
-  console.log(`Team Game JS: http://0.0.0.0:${process.env.PORT || 8001}`);
+  console.log(`Cricket Mini Games: http://0.0.0.0:${process.env.PORT || 8001}`);
 });

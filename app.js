@@ -74,6 +74,7 @@ function render() {
   if (page === "home") return homePage();
   if (page === "draft") return draftStart();
   if (page === "stats") return statsStart();
+  if (page === "chase") return chaseStart();
   if (page === "profile") return profilePage();
   if (page === "themes" || page === "history") { location.hash = "profile"; profileTab = page; return profilePage(); }
   if (page === "admin" && currentUser.role === "admin") return adminPage();
@@ -87,6 +88,13 @@ function bindProfileTabs() {
   });
 }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char]); }
+function playerAvatarMarkup(name, size = "") {
+  const safeName = String(name || "");
+  const initials = safeName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
+  const imageUrl = `/api/player-image?v=4&name=${encodeURIComponent(safeName)}`;
+  return `<span class="player-avatar ${size}" aria-hidden="true"><span>${escapeHtml(initials)}</span><img src="${imageUrl}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="this.style.display='none'"></span>`;
+}
+
 function authPage() {
   closeMobileMenu();
   $("#main-nav").hidden = true;
@@ -112,13 +120,20 @@ async function historyPage() {
     const date = new Date(game.playedAt).toLocaleString();
     let details = "";
     if (game.type === "stats") {
-      details = `<section class="history-section"><h3>Team totals · ${escapeHtml(data.criteria || "Stats")}</h3><div class="history-team-grid">${(data.teams || []).map((team) => `<article class="history-team"><h4>${escapeHtml(team.name)}</h4><p><strong>${escapeHtml(team.total)}</strong> total · ${escapeHtml(team.distance)} from target</p></article>`).join("")}</div><p class="history-winner">🏆 Winner: ${escapeHtml((data.winners || []).join(", ") || "—")}</p><h3>Player results</h3><ul class="history-player-list">${(data.players || []).map((player) => `<li><span>${escapeHtml(player.player)}</span><b>${escapeHtml(player.value)}</b><small>${escapeHtml(player.team || "")}</small></li>`).join("")}</ul></section>`;
+      details = `<section class="history-section"><h3>Team totals · ${escapeHtml(data.criteria || "Stats")}</h3><div class="history-team-grid">${(data.teams || []).map((team) => `<article class="history-team"><h4>${escapeHtml(team.name)}</h4><p><strong>${escapeHtml(team.total)}</strong> total · ${escapeHtml(team.distance)} from target</p></article>`).join("")}</div><p class="history-winner">🏆 Winner: ${escapeHtml((data.winners || []).join(", ") || "—")}</p><h3>Player results</h3><ul class="history-player-list">${(data.players || []).map((player) => `<li><span class="player-identity">${playerAvatarMarkup(player.player, "small")}${escapeHtml(player.player)}</span><b>${escapeHtml(player.value)}</b><small>${escapeHtml(player.team || "")}</small></li>`).join("")}</ul></section>`;
+    } else if (game.type === "chase") {
+      const batting = data.batting || [];
+      const bowling = data.bowling || [];
+      const overs = `${Math.floor((data.balls || 0) / 6)}.${(data.balls || 0) % 6}`;
+      const battingRows = batting.map((player) => `<tr><td><span class="player-identity">${playerAvatarMarkup(player.name, "tiny")}${escapeHtml(player.name)}${player.out ? " <small>(out)</small>" : ""}</span></td><td>${escapeHtml(player.runs ?? 0)}</td><td>${escapeHtml(player.balls ?? 0)}</td><td>${escapeHtml(player.fours ?? 0)}</td><td>${escapeHtml(player.sixes ?? 0)}</td><td>${player.balls ? (player.runs * 100 / player.balls).toFixed(1) : "—"}</td></tr>`).join("");
+      const bowlingRows = bowling.map((player) => `<tr><td><span class="player-identity">${playerAvatarMarkup(player.name, "tiny")}${escapeHtml(player.name)}</span></td><td>${Math.floor((player.balls || 0) / 6)}.${(player.balls || 0) % 6}</td><td>${escapeHtml(player.runs ?? 0)}</td><td>${escapeHtml(player.wickets ?? 0)}</td><td>${player.balls ? (player.runs * 6 / player.balls).toFixed(1) : "—"}</td></tr>`).join("");
+      details = `<section class="history-section chase-history-details"><h3 class="chase-history-fixture">${escapeHtml(data.userTeam || "Your team")} <span>vs</span> ${escapeHtml(data.opponentTeam || "Opponent")}</h3><p class="history-winner chase-history-result ${data.won ? "is-win" : "is-loss"}">${data.won ? "🏆 Won" : "🏏 Result"} · ${escapeHtml(data.result || "—")}</p><div class="chase-history-scoreline"><div><small>FINAL SCORE</small><b>${escapeHtml(data.score ?? 0)}<i>/${escapeHtml(data.wickets ?? 0)}</i></b><span>${escapeHtml(overs)} overs</span></div><div><small>TARGET</small><b>${escapeHtml(data.target ?? "—")}</b><span>${data.won ? "Chase completed" : "Target not reached"}</span></div></div><div class="history-team-grid chase-history-highlights"><article class="history-team"><small>TOP SCORER</small><h4 class="player-identity">${playerAvatarMarkup(data.topScorer?.name || "—", "small")}${escapeHtml(data.topScorer?.name || "—")}</h4><p><strong>${escapeHtml(data.topScorer?.runs ?? 0)}</strong> runs</p></article><article class="history-team"><small>BEST BOWLER</small><h4 class="player-identity">${playerAvatarMarkup(data.bestBowler?.name || "—", "small")}${escapeHtml(data.bestBowler?.name || "—")}</h4><p><strong>${escapeHtml(data.bestBowler?.wickets ?? 0)}/${escapeHtml(data.bestBowler?.runs ?? 0)}</strong> · wickets/runs</p></article></div><div class="chase-history-scorecards"><section class="chase-history-card"><h4>Batting scorecard</h4><div class="chase-history-table-wrap"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${battingRows || '<tr><td colspan="6">No batting details saved.</td></tr>'}</tbody></table></div></section><section class="chase-history-card"><h4>Bowling figures</h4><div class="chase-history-table-wrap"><table><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>${bowlingRows || '<tr><td colspan="5">No bowling details saved.</td></tr>'}</tbody></table></div></section></div></section>`;
     } else {
       const roles = data.roles || [];
       const rosters = (game.participants || []).map((team) => `<article class="history-team"><h4>${escapeHtml(team)}</h4><ul>${roles.map((role) => `<li><span>${escapeHtml(role)}</span><b>${escapeHtml(data.picks?.[`${team}|${role}`] || "—")}</b></li>`).join("")}</ul>${data.totals?.[team] !== undefined ? `<p>${escapeHtml(data.totals[team])} points</p>` : ""}</article>`).join("");
       details = `<section class="history-section"><h3>Final result</h3>${data.winner ? `<p class="history-winner">🏆 Winner: ${escapeHtml(data.winner)}${data.winningPoints ? ` · ${escapeHtml(data.winningPoints)} points` : ""}</p>` : ""}<div class="history-team-grid">${rosters}</div></section>`;
     }
-    return `<details class="card history-item"><summary><span><b>${game.type === "stats" ? "Stats Winner" : "Team Draft"}</b><small>${escapeHtml(date)}</small></span><span class="history-summary">${game.type === "stats" ? escapeHtml(data.criteria || "Player stats") : `${(game.participants || []).length} participants`}</span></summary>${details}<button class="danger-button" data-delete-game="${escapeHtml(game.id)}">Delete game</button></details>`;
+    return `<details class="card history-item ${game.type === "chase" ? "chase-history-item" : ""}"><summary><span><b>${game.type === "stats" ? "Stats Winner" : game.type === "chase" ? "Chase Master" : "Team Draft"}</b><small>${escapeHtml(date)}</small></span><span class="history-summary">${game.type === "stats" ? escapeHtml(data.criteria || "Player stats") : game.type === "chase" ? `${escapeHtml(data.score ?? "")} / ${escapeHtml(data.target ?? "")}` : `${(game.participants || []).length} participants`}</span></summary>${details}<button class="danger-button" data-delete-game="${escapeHtml(game.id)}">Delete game</button></details>`;
   }).join("");
   list.querySelectorAll("[data-delete-game]").forEach((button) => button.onclick = async () => {
     if (!confirm("Delete this game from your history?")) return;
@@ -177,7 +192,7 @@ async function saveHistory(type, title, data, participants) {
 
 function homePage() {
   const displayName = currentUser.displayName || currentUser.username;
-  app.innerHTML = `<section class="home-hero"><div class="home-hero-copy"><p class="eyebrow">YOUR CRICKET GAME NIGHT</p><h1>Ready to play, ${escapeHtml(displayName)}?</h1><p>Pick a game, gather your players, and see who takes the win.</p><div class="home-prompt"><span class="home-prompt-icon">🏏</span><span><b>Two ways to play</b><small>Build a dream team or put your cricket knowledge to the test.</small></span></div></div><div class="home-hero-art" aria-hidden="true"><span class="hero-ball">🏏</span><span class="hero-stumps">▥</span><span class="hero-orbit"></span></div></section><section class="home-games"><div class="home-section-heading"><div><p class="eyebrow">CHOOSE YOUR GAME</p><h2>How do you want to play?</h2></div><span class="home-section-note">Tap a game to get started</span></div><div class="game-card-grid"><button class="game-launch-card draft-launch" data-launch-game="draft" aria-label="Open Team Draft"><span class="game-card-topline"><span class="game-card-icon">🧢</span><span class="game-card-tag">PICK · PLAN · PLAY</span></span><span class="game-card-title">Team Draft</span><span class="game-card-summary">Build a cricket team together, one pick at a time.</span><span class="game-card-details"><span>Choose six specialist roles or draft a full Playing XI. Take turns picking from your player list, then decide who built the winning team.</span><span class="game-card-meta"><b>2+ players</b><b>Shared picks</b><b>Six roles or XI</b></span></span><span class="game-card-action">Start a draft <span aria-hidden="true">↗</span></span></button><button class="game-launch-card stats-launch" data-launch-game="stats" aria-label="Open Stats Winner"><span class="game-card-topline"><span class="game-card-icon">📊</span><span class="game-card-tag">GUESS · COMPARE · WIN</span></span><span class="game-card-title">Stats Winner</span><span class="game-card-summary">Choose a target and see whose cricket stats come closest.</span><span class="game-card-details"><span>Pick international or IPL runs and wickets. Add players to each team, set your target, and let the career stats decide the winner.</span><span class="game-card-meta"><b>Intl & IPL</b><b>Runs & wickets</b><b>Play your target</b></span></span><span class="game-card-action">Play Stats Winner <span aria-hidden="true">↗</span></span></button></div></section><section class="home-footer-card"><span>🏆</span><p><b>Keep the rivalry going.</b><small>Your completed games are saved in your Profile under History.</small></p><button data-page="profile">Go to Profile</button></section>`;
+  app.innerHTML = `<section class="home-hero"><div class="home-hero-copy"><p class="eyebrow">YOUR CRICKET GAME NIGHT</p><h1>Ready to play, ${escapeHtml(displayName)}?</h1><p>Pick a game, gather your players, and see who takes the win.</p><div class="home-prompt"><span class="home-prompt-icon">🏏</span><span><b>Three ways to play</b><small>Draft a dream team, compare stats, or chase an IPL target ball by ball.</small></span></div></div><div class="home-hero-art" aria-hidden="true"><span class="hero-ball">🏏</span><span class="hero-stumps">▥</span><span class="hero-orbit"></span></div></section><section class="home-games"><div class="home-section-heading"><div><p class="eyebrow">CHOOSE YOUR GAME</p><h2>How do you want to play?</h2></div><span class="home-section-note">Tap a game to get started</span></div><div class="game-card-grid"><button class="game-launch-card draft-launch" data-launch-game="draft" aria-label="Open Team Draft"><span class="game-card-topline"><span class="game-card-icon">🧢</span><span class="game-card-tag">PICK · PLAN · PLAY</span></span><span class="game-card-title">Team Draft</span><span class="game-card-summary">Build a cricket team together, one pick at a time.</span><span class="game-card-details"><span>Choose six specialist roles or draft a full Playing XI. Take turns picking from your player list, then decide who built the winning team.</span><span class="game-card-meta"><b>2+ players</b><b>Shared picks</b><b>Six roles or XI</b></span></span><span class="game-card-action">Start a draft <span aria-hidden="true">↗</span></span></button><button class="game-launch-card stats-launch" data-launch-game="stats" aria-label="Open Stats Winner"><span class="game-card-topline"><span class="game-card-icon">📊</span><span class="game-card-tag">GUESS · COMPARE · WIN</span></span><span class="game-card-title">Stats Winner</span><span class="game-card-summary">Choose a target and see whose cricket stats come closest.</span><span class="game-card-details"><span>Pick international or IPL runs and wickets. Add players to each team, set your target, and let the career stats decide the winner.</span><span class="game-card-meta"><b>Intl & IPL</b><b>Runs & wickets</b><b>Play your target</b></span></span><span class="game-card-action">Play Stats Winner <span aria-hidden="true">↗</span></span></button><button class="game-launch-card chase-launch" data-launch-game="chase" aria-label="Open Chase Master"><span class="game-card-topline"><span class="game-card-icon">🏏</span><span class="game-card-tag">PICK · CHASE · WIN</span></span><span class="game-card-title">Chase Master</span><span class="game-card-summary">Choose two IPL squads and chase a live target.</span><span class="game-card-details"><span>Pick both Playing XIs, adjust your batting order, and chase a randomly set score with Safe and Aggressive shots.</span><span class="game-card-meta"><b>10 IPL teams</b><b>Live scorecard</b><b>Ball-by-ball play</b></span></span><span class="game-card-action">Start a chase <span aria-hidden="true">↗</span></span></button></div></section><section class="home-footer-card"><span>🏆</span><p><b>Keep the rivalry going.</b><small>Your completed games are saved in your Profile under History.</small></p><button data-page="profile">Go to Profile</button></section>`;
   document.querySelectorAll("[data-launch-game]").forEach((button) => button.onclick = () => show(button.dataset.launchGame));
   $("[data-page=profile]", app)?.addEventListener("click", () => { profileTab = "profile"; show("profile"); });
 }
@@ -233,7 +248,7 @@ function draftGame(s) {
     used = Object.keys(s.picks)
       .filter((k) => k.startsWith(`${name}|`))
       .map((k) => k.split("|")[1]);
-  app.innerHTML = `<button class="screen-back-link" data-return-home>← All games</button><div class="draft-progress"><span class="eyebrow">TEAM DRAFT</span><span>Pick ${s.turn + 1} of ${total}</span></div><div class="draft-progress-track"><span style="width:${Math.round((s.turn / total) * 100)}%"></span></div><section class="card draft-player"><div><h2>${name}, choose your role</h2><p class="note">Assigned roles remain disabled.</p></div><div class="banner">${player}</div></section>${teamTable(s)}<section class="card"><h2>Assign ${player}</h2><div class="role-grid">${s.roles.map((r) => `<button data-role="${r}" ${used.includes(r) ? "disabled" : ""}>${r}</button>`).join("")}</div></section>`;
+  app.innerHTML = `<button class="screen-back-link" data-return-home>← All games</button><div class="draft-progress"><span class="eyebrow">TEAM DRAFT</span><span>Pick ${s.turn + 1} of ${total}</span></div><div class="draft-progress-track"><span style="width:${Math.round((s.turn / total) * 100)}%"></span></div><section class="card draft-player"><div><h2>${escapeHtml(name)}, choose your role</h2><p class="note">Assigned roles remain disabled.</p></div><div class="banner player-banner">${playerAvatarMarkup(player, "featured")}<span>${escapeHtml(player)}</span></div></section>${teamTable(s)}<section class="card"><h2>Assign ${player}</h2><div class="role-grid">${s.roles.map((r) => `<button data-role="${r}" ${used.includes(r) ? "disabled" : ""}>${r}</button>`).join("")}</div></section>`;
   $("[data-return-home]").onclick = () => show("home");
   document.querySelectorAll("[data-role]").forEach(
     (b) =>
@@ -245,11 +260,11 @@ function draftGame(s) {
   );
 }
 function teamTable(s) {
-  return `<div class="table-wrap"><table><thead><tr><th>Slot</th>${s.names.map((n) => `<th>${n}</th>`).join("")}</tr></thead><tbody>${s.roles.map((r) => `<tr><th>${r}</th>${s.names.map((n) => `<td>${s.picks[`${n}|${r}`] || "—"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th scope="col">Slot</th>${s.names.map((name) => `<th scope="col">${escapeHtml(name)}</th>`).join("")}<th scope="col">Awarded to</th></tr></thead><tbody>${s.roles.map((role) => `<tr><th scope="row">${escapeHtml(role)}</th>${s.names.map((name) => { const player = s.picks[`${name}|${role}`]; return `<td>${player ? `<span class="player-identity">${playerAvatarMarkup(player, "draft")}${escapeHtml(player)}</span>` : "—"}</td>`; }).join("")}<td class="draft-awarded-to">${s.points[role] ? `<strong>${escapeHtml(s.points[role])}</strong>` : `<span class="note">—</span>`}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function scoreDraft(s) {
   if (s.type === "xi") {
-    app.innerHTML = `${teamTable(s)}<section class="card"><h2>Which Playing XI wins?</h2><p>One overall point decides this draft.</p><div class="role-grid">${s.names.map((n) => `<button data-win="${n}">${n}</button>`).join("")}</div></section>`;
+    app.innerHTML = `${teamTable(s)}<section class="card"><h2>Which Playing XI wins?</h2><p>One overall point decides this draft.</p><div class="role-grid">${s.names.map((n) => `<button data-win="${n}">${playerAvatarMarkup(n)}${escapeHtml(n)}</button>`).join("")}</div></section>`;
     document
       .querySelectorAll("[data-win]")
       .forEach(
@@ -276,7 +291,7 @@ function scoreDraft(s) {
     saveHistory("draft", "Team Draft", { type: s.type, roles: s.roles, picks: s.picks, points: s.points, totals, winner, winningPoints: best }, s.names).catch((error) => alert(error.message));
     return;
   }
-  app.innerHTML = `${teamTable(s)}<section class="card"><h2>Who wins ${pending}?</h2><div class="role-grid">${s.names.map((n) => `<button data-win="${n}">${s.picks[`${n}|${pending}`]}<br><small>Team: ${n}</small></button>`).join("")}</div></section>`;
+  app.innerHTML = `${teamTable(s)}<section class="card"><h2>Who wins ${pending}?</h2><div class="role-grid">${s.names.map((n) => `<button data-win="${n}"><span class="draft-winner-player">${playerAvatarMarkup(s.picks[`${n}|${pending}`], "draft")}<span>${escapeHtml(s.picks[`${n}|${pending}`])}</span></span><small>Team: ${escapeHtml(n)}</small></button>`).join("")}</div></section>`;
   document.querySelectorAll("[data-win]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -328,7 +343,7 @@ function renderStatsPlayerSetup(teamNames, slots, criteria, limit) {
 }
 function statsGrid(teamNames, playerNames, slots, criteria, limit) {
   const names = teamNames;
-  app.innerHTML = `<button class="screen-back-link" data-return-home>← All games</button><section class="screen-intro stats-screen-intro"><div><p class="eyebrow">STATS WINNER · ${escapeHtml(criteria.toUpperCase())}</p><h1>Player line-up locked</h1><p>Target: <b>${limit}</b>. These are the players selected during setup.</p></div><span class="screen-intro-icon" aria-hidden="true">🏆</span></section><div class="table-wrap"><table><thead><tr><th scope="col">Slot</th>${names.map((name) => `<th scope="col">${escapeHtml(name)}</th>`).join("")}</tr></thead><tbody>${Array.from({ length: slots }, (_, row) => `<tr><th scope="row">${row + 1}</th>${names.map((_, team) => `<td>${escapeHtml(playerNames[team * slots + row] || "—")}</td>`).join("")}</tr>`).join("")}</tbody></table></div><p><button id="calculate">Look up stats & calculate winner</button></p><section id="stats-result" class="card" aria-live="polite"><p class="note">Unavailable stats are not treated as zero. Correct any unavailable lookup and recalculate.</p></section>`;
+  app.innerHTML = `<button class="screen-back-link" data-return-home>← All games</button><section class="screen-intro stats-screen-intro"><div><p class="eyebrow">STATS WINNER · ${escapeHtml(criteria.toUpperCase())}</p><h1>Player line-up locked</h1><p>Target: <b>${limit}</b>. These are the players selected during setup.</p></div><span class="screen-intro-icon" aria-hidden="true">🏆</span></section><div class="table-wrap"><table><thead><tr><th scope="col">Slot</th>${names.map((name) => `<th scope="col">${escapeHtml(name)}</th>`).join("")}</tr></thead><tbody>${Array.from({ length: slots }, (_, row) => `<tr><th scope="row">${row + 1}</th>${names.map((_, team) => `<td><span class="player-identity">${playerNames[team * slots + row] ? playerAvatarMarkup(playerNames[team * slots + row], "small") : ""}${escapeHtml(playerNames[team * slots + row] || "—")}</span></td>`).join("")}</tr>`).join("")}</tbody></table></div><p><button id="calculate">Look up stats & calculate winner</button></p><section id="stats-result" class="card" aria-live="polite"><p class="note">Unavailable stats are not treated as zero. Correct any unavailable lookup and recalculate.</p></section>`;
   $("[data-return-home]").onclick = () => show("home");
   $("#calculate").onclick = async () => {
     const fields = playerNames.map((player, index) => ({ value: player, dataset: { team: String(Math.floor(index / slots)) } }));
@@ -384,9 +399,223 @@ function statsGrid(teamNames, playerNames, slots, criteria, limit) {
     const differences = totals.map((total) => Math.abs(limit - total));
     const best = Math.min(...differences);
     const winners = names.filter((_, index) => differences[index] === best);
-    result.innerHTML = `<h2>Results</h2><div class="table-wrap"><table><thead><tr><th>Team</th><th>Total ${escapeHtml(criteria)}</th><th>Distance from limit</th></tr></thead><tbody>${names.map((name, index) => `<tr><td>${escapeHtml(name)}</td><td class="stat-value">${totals[index]}</td><td>${differences[index]}</td></tr>`).join("")}</tbody></table></div><p class="winner">🏆 Winner: ${escapeHtml(winners.join(", "))} — closest to ${limit}</p><h3>ESPNcricinfo lookup details</h3><ul>${data.map((item) => `<li>${escapeHtml(item.player)}: <b>${item.value}</b> <small>(${escapeHtml(item.source)})</small></li>`).join("")}</ul>`;
+    result.innerHTML = `<h2>Results</h2><div class="table-wrap"><table><thead><tr><th>Team</th><th>Total ${escapeHtml(criteria)}</th><th>Distance from limit</th></tr></thead><tbody>${names.map((name, index) => `<tr><td>${escapeHtml(name)}</td><td class="stat-value">${totals[index]}</td><td>${differences[index]}</td></tr>`).join("")}</tbody></table></div><p class="winner">🏆 Winner: ${escapeHtml(winners.join(", "))} — closest to ${limit}</p><h3>ESPNcricinfo lookup details</h3><ul>${data.map((item) => `<li><span class="player-identity">${playerAvatarMarkup(item.player, "small")}${escapeHtml(item.player)}</span>: <b>${item.value}</b> <small>(${escapeHtml(item.source)})</small></li>`).join("")}</ul>`;
     saveHistory("stats", `Stats Winner · ${criteria}`, { criteria, limit, teams: names.map((name, index) => ({ name, total: totals[index], distance: differences[index] })), winners, players: data.map(({ team, player, value, source }) => ({ team: names[team], player, value, source })) }, names).catch((error) => alert(error.message));
   };
+}
+
+async function chaseStart() {
+  app.innerHTML = `<section class="screen-intro"><div><p class="eyebrow">CHASE MASTER · IPL</p><h1>Pick your rivalry</h1><p>Choose the team you’ll lead and the opponent you’ll chase down.</p></div><span class="screen-intro-icon" aria-hidden="true">🏏</span></section><section class="card chase-loading"><span class="chase-loader" aria-hidden="true"></span><span>Loading the latest IPL squads…</span></section>`;
+  try {
+    const response = await fetch("/api/chase-squads");
+    if (!response.ok) throw new Error("IPL squads could not be loaded.");
+    const { teams } = await response.json();
+    renderChaseTeamSetup(teams);
+  } catch (error) {
+    app.innerHTML = `<section class="card"><h2>Squads unavailable</h2><p>${escapeHtml(error.message)}</p><button data-page="home">Back home</button></section>`;
+    $("[data-page=home]", app).onclick = () => show("home");
+  }
+}
+function renderChaseTeamSetup(teams, selectedUser = teams[0]?.name, selectedOpponent = teams[1]?.name) {
+  app.innerHTML = `<button class="screen-back-link" data-page="home">← All games</button><section class="screen-intro"><div><p class="eyebrow">CHASE MASTER · STEP 1</p><h1>Choose your teams</h1><p>Your opponent’s bowlers will come from the opponent Playing XI.</p></div><span class="screen-intro-icon" aria-hidden="true">🏟️</span></section><section class="card setup-card"><form id="chase-team-form"><div class="chase-team-select-grid"><label>Your IPL team<select name="userTeam" required>${teams.map((team) => `<option value="${escapeHtml(team.name)}" ${team.name === selectedUser ? "selected" : ""}>${escapeHtml(team.name)}</option>`).join("")}</select></label><label>Opponent team<select name="opponentTeam" required>${teams.map((team) => `<option value="${escapeHtml(team.name)}" ${team.name === selectedOpponent ? "selected" : ""}>${escapeHtml(team.name)}</option>`).join("")}</select></label></div><p id="chase-team-error" class="note" role="status"></p><button type="submit">Choose Playing XIs</button></form></section>`;
+  $("[data-page=home]", app).onclick = () => show("home");
+  $("#chase-team-form").onsubmit = (event) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const userName = values.get("userTeam");
+    const opponentName = values.get("opponentTeam");
+    if (userName === opponentName) { $("#chase-team-error").textContent = "Choose two different teams."; return; }
+    const userTeam = teams.find((team) => team.name === userName);
+    const opponentTeam = teams.find((team) => team.name === opponentName);
+    renderChaseLineup({ userTeam, opponentTeam, allTeams: teams, userPicks: new Set(), opponentPicks: new Set() });
+  };
+}
+function renderChaseLineup(state) {
+  const teamPicker = (team, key, title) => `<section class="chase-pick-team"><div class="chase-pick-heading"><h2>${escapeHtml(title)}</h2><span id="${key}-count">0 / 11 selected</span></div><div class="chase-squad-list" data-squad="${key}">${team.players.map((player, index) => `<button type="button" class="chase-player-pick" data-pick-team="${key}" data-pick-index="${index}" aria-pressed="false"><span class="chase-picker-identity">${playerAvatarMarkup(player.name, "squad")}<span><b>${escapeHtml(player.name)}</b><small>${escapeHtml(player.role)}</small></span></span><span class="pick-check" aria-hidden="true">+</span></button>`).join("")}</div></section>`;
+  app.innerHTML = `<button class="screen-back-link" id="chase-team-back">← Team selection</button><section class="screen-intro"><div><p class="eyebrow">CHASE MASTER · STEP 2</p><h1>Select both Playing XIs</h1><p>Pick 11 players per team. Your opponent must have at least five bowlers or all-rounders.</p></div><span class="screen-intro-icon" aria-hidden="true">👥</span></section><div class="chase-pick-grid">${teamPicker(state.userTeam, "user", "Your XI · " + state.userTeam.name)}${teamPicker(state.opponentTeam, "opponent", "Opponent XI · " + state.opponentTeam.name)}</div><section class="card chase-lineup-footer"><p id="chase-lineup-error" class="note" role="status">Select 11 players for each side.</p><button id="chase-start-match" disabled>Set batting order & start chase</button></section>`;
+  $("#chase-team-back").onclick = () => renderChaseTeamSetup(state.allTeams, state.userTeam.name, state.opponentTeam.name);
+  const refresh = () => {
+    const userCount = state.userPicks.size;
+    const opponentCount = state.opponentPicks.size;
+    $("#user-count").textContent = `${userCount} / 11 selected`;
+    $("#opponent-count").textContent = `${opponentCount} / 11 selected`;
+    const eligible = [...state.opponentPicks].filter((index) => ["bowler", "allrounder"].includes(state.opponentTeam.players[index].role)).length;
+    const button = $("#chase-start-match");
+    button.disabled = userCount !== 11 || opponentCount !== 11 || eligible < 5;
+    $("#chase-lineup-error").textContent = eligible < 5 && opponentCount === 11 ? "Opponent XI needs at least five bowlers or all-rounders." : `Your XI: ${userCount}/11 · Opponent XI: ${opponentCount}/11 · Opponent bowling options: ${eligible}`;
+  };
+  $(".chase-pick-grid").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-pick-team]");
+    if (!button) return;
+    const key = button.dataset.pickTeam;
+    const picks = key === "user" ? state.userPicks : state.opponentPicks;
+    const index = Number(button.dataset.pickIndex);
+    if (picks.has(index)) picks.delete(index);
+    else if (picks.size < 11) picks.add(index);
+    else return;
+    button.classList.toggle("selected", picks.has(index));
+    button.setAttribute("aria-pressed", String(picks.has(index)));
+    button.querySelector(".pick-check").textContent = picks.has(index) ? "✓" : "+";
+    refresh();
+  });
+  $("#chase-start-match").onclick = () => {
+    const userXI = [...state.userPicks].map((index) => state.userTeam.players[index]);
+    const opponentXI = [...state.opponentPicks].map((index) => state.opponentTeam.players[index]);
+    const target = 160 + Math.floor(Math.random() * 91);
+    const bowlers = opponentXI.filter((player) => ["bowler", "allrounder"].includes(player.role)).map((player) => ({ name: player.name, role: player.role, balls: 0, runs: 0, wickets: 0 }));
+    const game = { userTeam: state.userTeam.name, opponentTeam: state.opponentTeam.name, target, battingOrder: userXI.map((player) => player.name), batters: userXI.map((player) => ({ name: player.name, runs: 0, balls: 0, fours: 0, sixes: 0, out: false })), bowlers, balls: 0, runs: 0, wickets: 0, striker: userXI[0].name, nonStriker: userXI[1].name, nextBatter: 2, partnership: 0, currentBowler: null, lastBowler: null, lastOutcome: "—", overOrder: 0, finished: false };
+    advanceChaseBowler(game);
+    renderChaseMatch(game);
+  };
+  refresh();
+}
+function advanceChaseBowler(game) {
+  const available = game.bowlers.filter((bowler) => bowler.balls < 24 && bowler.name !== game.lastBowler);
+  const choices = available.length ? available : game.bowlers.filter((bowler) => bowler.balls < 24);
+  choices.sort((a, b) => a.balls - b.balls || game.bowlers.indexOf(a) - game.bowlers.indexOf(b));
+  game.currentBowler = choices[0]?.name || null;
+  game.overOrder += 1;
+}
+function chaseCurrentOver(game) { return `${Math.floor(game.balls / 6)}.${game.balls % 6}`; }
+function chaseCrr(game) { return game.balls ? game.runs * 6 / game.balls : 0; }
+function chaseRrr(game) { const ballsLeft = Math.max(0, 120 - game.balls); return ballsLeft ? Math.max(0, game.target - game.runs) * 6 / ballsLeft : 0; }
+function chaseWinProbability(game) {
+  if (game.runs >= game.target) return 100;
+  if (game.wickets >= 10 || game.balls >= 120) return 0;
+  const progress = game.balls / 120;
+  const paceMargin = game.runs / game.target - progress;
+  const logit = 7 * paceMargin - game.wickets * 0.2 * progress + 0.25 * progress;
+  return Math.round(100 / (1 + Math.exp(-logit)));
+}
+function renderChaseMatch(game) {
+  const striker = game.batters.find((player) => player.name === game.striker);
+  const nonStriker = game.batters.find((player) => player.name === game.nonStriker);
+  const currentBowler = game.bowlers.find((bowler) => bowler.name === game.currentBowler);
+  const probability = chaseWinProbability(game);
+  const strikerButtons = game.battingOrder.map((name) => {
+    const active = name === game.striker || name === game.nonStriker;
+    return `<button class="chase-striker-choice ${name === game.striker ? "active" : ""}" data-striker="${escapeHtml(name)}" ${active ? "" : "disabled"}>${playerAvatarMarkup(name, "striker")}<span>${escapeHtml(name)}${name === game.striker ? " · STRIKER" : name === game.nonStriker ? " · NON-STRIKER" : ""}</span></button>`;
+  }).join("");
+  app.innerHTML = `<section class="screen-intro chase-match-intro"><div><p class="eyebrow">CHASE MASTER · LIVE INNINGS</p><h1>${escapeHtml(game.userTeam)} vs ${escapeHtml(game.opponentTeam)}</h1><p>Target ${game.target} · 20 overs · Choose a shot for every ball.</p></div><span class="screen-intro-icon" aria-hidden="true">🏏</span></section><div class="chase-layout"><section class="chase-score-column"><article class="card chase-score-panel"><div class="chase-metrics"><div><small>CRR</small><b>${chaseCrr(game).toFixed(2)}</b></div><div class="target-metric"><small>TARGET</small><b>${game.target}</b></div><div><small>RRR</small><b>${game.balls >= 120 ? "—" : chaseRrr(game).toFixed(2)}</b></div></div><div class="chase-win-prob"><div><small>WIN PROBABILITY</small><b>${probability}%</b></div><div class="chase-prob-track"><span style="width:${probability}%"></span></div></div><div class="chase-big-score"><strong>${game.runs}<i>/</i><em>${game.wickets}</em></strong><span class="chase-ball-badge">${escapeHtml(game.lastOutcome)}</span><small>OVERS ${chaseCurrentOver(game)}</small></div><div class="chase-quick"><div class="chase-quick-title"><small>QUICK MATCH</small><b>${escapeHtml(game.userTeam)} vs ${escapeHtml(game.opponentTeam)}</b></div><div class="chase-mini-head"><span></span><span>R</span><span>B</span><span>4</span><span>6</span><span>SR</span></div>${[striker, nonStriker].map((player) => `<div class="chase-mini-row"><b class="player-identity">${playerAvatarMarkup(player.name, "tiny")}${escapeHtml(player.name)}${player.name === game.striker ? " *" : ""}</b><span>${player.runs}</span><span>${player.balls}</span><span>${player.fours}</span><span>${player.sixes}</span><span>${player.balls ? (player.runs * 100 / player.balls).toFixed(0) : "-"}</span></div>`).join("")}<div class="chase-mini-head chase-bowling-head"><span>Bowler</span><span>O</span><span>R</span><span>W</span><span></span><span>ECO</span></div><div class="chase-mini-row"><b class="player-identity">${currentBowler ? playerAvatarMarkup(currentBowler.name, "tiny") : ""}${escapeHtml(currentBowler?.name || "—")}</b><span>${currentBowler ? `${Math.floor(currentBowler.balls / 6)}.${currentBowler.balls % 6}` : "0.0"}</span><span>${currentBowler?.runs || 0}</span><span>${currentBowler?.wickets || 0}</span><span></span><span>${currentBowler?.balls ? (currentBowler.runs * 6 / currentBowler.balls).toFixed(1) : "-"}</span></div><p class="chase-partnership">Partnership: <b>${game.partnership}</b> runs</p></div><div class="chase-shot-controls"><button class="safe-shot" data-shot="safe">🛡 Safe</button><button class="aggressive-shot" data-shot="aggressive">⚡ Aggressive</button></div><p class="chase-shot-note">Safe: 0, 1, 2, 3 runs · Aggressive: 0, 3, 4, 6, or wicket</p><div class="chase-striker-area"><small>SELECT STRIKER · PLAYING XI</small><div class="chase-striker-grid">${strikerButtons}</div></div></article><article class="card chase-order-card"><div class="chase-section-title"><div><small>BATTING ORDER</small><h2>Your Playing XI</h2></div><span>${game.balls === 0 ? "Drag cards to arrange · use ↑/↓ keys" : "Batting order locked"}</span></div><ol class="chase-batting-order" aria-label="Batting order">${game.battingOrder.map((name, index) => { const batter = game.batters.find((player) => player.name === name); return `<li class="chase-batter-card ${name === game.striker ? "on-strike" : ""} ${batter?.out ? "dismissed" : ""}" draggable="${game.balls === 0}" tabindex="${game.balls === 0 ? "0" : "-1"}" role="listitem" data-batting-index="${index}" aria-label="Position ${index + 1}: ${escapeHtml(name)}${name === game.striker ? ", striker" : name === game.nonStriker ? ", non-striker" : ""}. ${game.balls === 0 ? "Use arrow keys to reorder." : "Batting order locked."}"><span class="chase-batter-position">${String(index + 1).padStart(2, "0")}</span>${playerAvatarMarkup(name, "small")}<span class="chase-batter-name">${escapeHtml(name)}<small>${name === game.striker ? "Striker" : name === game.nonStriker ? "Non-striker" : batter?.out ? "Out" : "Yet to bat"}</small></span><span class="chase-drag-grip" aria-hidden="true" title="Drag to reorder">⠿</span></li>`; }).join("")}</ol></article></section><section class="chase-scorecards"><article class="card chase-scorecard"><div class="chase-section-title"><div><small>INNINGS SCORECARD</small><h2>${escapeHtml(game.userTeam)} batting</h2></div><b>${game.runs}/${game.wickets}</b></div><div class="chase-table-wrap"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4</th><th>6</th><th>SR</th></tr></thead><tbody>${game.battingOrder.map((name) => { const player = game.batters.find((item) => item.name === name); return `<tr class="${name === game.striker ? "on-strike" : ""}"><td><span class="player-identity">${playerAvatarMarkup(name, "tiny")}${escapeHtml(name)}${name === game.striker ? " *" : ""}${player.out ? " (out)" : ""}</span></td><td>${player.runs}</td><td>${player.balls}</td><td>${player.fours}</td><td>${player.sixes}</td><td>${player.balls ? (player.runs * 100 / player.balls).toFixed(1) : "-"}</td></tr>`; }).join("")}</tbody></table></div></article><article class="card chase-scorecard"><div class="chase-section-title"><div><small>OPPONENT BOWLING</small><h2>${escapeHtml(game.opponentTeam)}</h2></div><span>Bowler rotation is automatic</span></div><div class="chase-table-wrap"><table><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead><tbody>${game.bowlers.map((bowler) => `<tr class="${bowler.name === game.currentBowler ? "current-bowler" : ""}"><td><span class="player-identity">${playerAvatarMarkup(bowler.name, "tiny")}${escapeHtml(bowler.name)}</span></td><td>${Math.floor(bowler.balls / 6)}.${bowler.balls % 6}</td><td>${bowler.runs}</td><td>${bowler.wickets}</td><td>${bowler.balls ? (bowler.runs * 6 / bowler.balls).toFixed(1) : "-"}</td></tr>`).join("")}</tbody></table></div></article></section></div>`;
+  document.querySelectorAll("[data-shot]").forEach((button) => button.onclick = () => playChaseBall(game, button.dataset.shot));
+  document.querySelectorAll("[data-striker]").forEach((button) => button.onclick = () => { if (button.dataset.striker !== game.striker) [game.striker, game.nonStriker] = [game.nonStriker, game.striker]; renderChaseMatch(game); });
+  const battingList = $(".chase-batting-order");
+  const reorderBatters = (from, to) => {
+    if (game.balls > 0 || from === to || from < 0 || to < 0 || from >= game.battingOrder.length || to >= game.battingOrder.length) return;
+    const [player] = game.battingOrder.splice(from, 1);
+    game.battingOrder.splice(to, 0, player);
+    game.striker = game.battingOrder[0];
+    game.nonStriker = game.battingOrder[1];
+    renderChaseMatch(game);
+    document.querySelector(`[data-batting-index="${to}"]`)?.focus();
+  };
+  let draggedBatter = null;
+  battingList.addEventListener("dragstart", (event) => {
+    const card = event.target.closest("[data-batting-index]");
+    if (!card || game.balls > 0) { event.preventDefault(); return; }
+    draggedBatter = Number(card.dataset.battingIndex);
+    card.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(draggedBatter));
+  });
+  battingList.addEventListener("dragend", () => battingList.querySelectorAll(".dragging").forEach((card) => card.classList.remove("dragging")));
+  battingList.addEventListener("dragover", (event) => { if (event.target.closest("[data-batting-index]")) event.preventDefault(); });
+  battingList.addEventListener("drop", (event) => {
+    const target = event.target.closest("[data-batting-index]");
+    if (!target || draggedBatter === null) return;
+    event.preventDefault();
+    reorderBatters(draggedBatter, Number(target.dataset.battingIndex));
+    draggedBatter = null;
+  });
+  battingList.addEventListener("keydown", (event) => {
+    if (!game.balls && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      const from = Number(event.target.closest("[data-batting-index]")?.dataset.battingIndex);
+      const to = from + (event.key === "ArrowUp" ? -1 : 1);
+      if (to >= 0 && to < game.battingOrder.length) reorderBatters(from, to);
+    }
+  });
+  let touchDrag = null;
+  battingList.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "touch" || game.balls > 0) return;
+    const handle = event.target.closest(".chase-drag-grip");
+    const card = handle?.closest("[data-batting-index]");
+    if (!card) return;
+    touchDrag = { pointerId: event.pointerId, from: Number(card.dataset.battingIndex), to: Number(card.dataset.battingIndex), card };
+    card.classList.add("dragging");
+    handle.setPointerCapture(event.pointerId);
+  });
+  battingList.addEventListener("pointermove", (event) => {
+    if (!touchDrag || touchDrag.pointerId !== event.pointerId) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-batting-index]");
+    if (target) touchDrag.to = Number(target.dataset.battingIndex);
+  });
+  const finishTouchDrag = (event) => {
+    if (!touchDrag || touchDrag.pointerId !== event.pointerId) return;
+    const { from, to, card } = touchDrag;
+    card.classList.remove("dragging");
+    touchDrag = null;
+    reorderBatters(from, to);
+  };
+  battingList.addEventListener("pointerup", finishTouchDrag);
+  battingList.addEventListener("pointercancel", finishTouchDrag);
+}
+function playChaseBall(game, shot) {
+  if (game.finished) return;
+  const safeRoll = Math.random();
+  const outcome = shot === "safe"
+    ? safeRoll < 0.4 ? 0 : safeRoll < 0.8 ? 1 : safeRoll < 0.97 ? 2 : 3
+    : [0, 3, 4, 6, "W"][Math.floor(Math.random() * 5)];
+  game.lastOutcome = outcome;
+  const batter = game.batters.find((player) => player.name === game.striker);
+  const bowler = game.bowlers.find((player) => player.name === game.currentBowler);
+  batter.balls += 1;
+  bowler.balls += 1;
+  game.balls += 1;
+  if (outcome === "W") {
+    game.wickets += 1;
+    batter.out = true;
+    bowler.wickets += 1;
+    game.partnership = 0;
+    if (game.wickets < 10 && game.nextBatter < game.battingOrder.length) {
+      const incoming = game.battingOrder[game.nextBatter++];
+      game.striker = incoming;
+    }
+  } else {
+    batter.runs += outcome;
+    game.runs += outcome;
+    game.partnership += outcome;
+    bowler.runs += outcome;
+    if (outcome === 4) batter.fours += 1;
+    if (outcome === 6) batter.sixes += 1;
+    if (outcome % 2 === 1) [game.striker, game.nonStriker] = [game.nonStriker, game.striker];
+  }
+  const overComplete = game.balls % 6 === 0;
+  if (overComplete) {
+    [game.striker, game.nonStriker] = [game.nonStriker, game.striker];
+    game.lastBowler = game.currentBowler;
+    if (game.balls < 120) advanceChaseBowler(game);
+  }
+  if (game.runs >= game.target || game.wickets >= 10 || game.balls >= 120) {
+    game.finished = true;
+    finishChase(game);
+    return;
+  }
+  renderChaseMatch(game);
+}
+function finishChase(game) {
+  const won = game.runs >= game.target;
+  const remainingWickets = 10 - game.wickets;
+  const margin = won ? `${remainingWickets} wicket${remainingWickets === 1 ? "" : "s"}` : `${game.target - game.runs} run${game.target - game.runs === 1 ? "" : "s"}`;
+  const topScorer = [...game.batters].sort((a, b) => b.runs - a.runs || b.balls - a.balls)[0];
+  const bestBowler = [...game.bowlers].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs)[0];
+  const result = won ? `${game.userTeam} won by ${margin}` : `${game.opponentTeam} won by ${margin}`;
+  const data = { userTeam: game.userTeam, opponentTeam: game.opponentTeam, target: game.target, score: game.runs, wickets: game.wickets, balls: game.balls, won, result, topScorer: { name: topScorer?.name || "—", runs: topScorer?.runs || 0 }, bestBowler: { name: bestBowler?.name || "—", wickets: bestBowler?.wickets || 0, runs: bestBowler?.runs || 0 }, batting: game.batters, bowling: game.bowlers };
+  app.innerHTML = `<button class="screen-back-link" data-page="home">← Home</button><section class="screen-intro"><div><p class="eyebrow">CHASE MASTER · FINAL RESULT</p><h1>${won ? "Chase complete!" : "Innings complete"}</h1><p>${escapeHtml(result)} · Final score ${game.runs}/${game.wickets} in ${chaseCurrentOver(game)} overs against ${game.target}.</p></div><span class="screen-intro-icon" aria-hidden="true">${won ? "🏆" : "🏏"}</span></section><section class="card chase-result-card"><p class="chase-result-kicker">${won ? "VICTORY" : "MATCH RESULT"}</p><h2>${escapeHtml(result)}</h2><div class="chase-result-highlights"><article><small>TOP SCORER</small><b class="player-identity">${playerAvatarMarkup(topScorer?.name || "—", "small")}${escapeHtml(topScorer?.name || "—")}</b><strong>${topScorer?.runs || 0}</strong><span>${topScorer?.balls || 0} balls · SR ${topScorer?.balls ? (topScorer.runs * 100 / topScorer.balls).toFixed(1) : "—"}</span></article><article><small>BEST BOWLER</small><b class="player-identity">${playerAvatarMarkup(bestBowler?.name || "—", "small")}${escapeHtml(bestBowler?.name || "—")}</b><strong>${bestBowler?.wickets || 0}/${bestBowler?.runs || 0}</strong><span>${Math.floor((bestBowler?.balls || 0) / 6)}.${(bestBowler?.balls || 0) % 6} overs · Econ ${bestBowler?.balls ? (bestBowler.runs * 6 / bestBowler.balls).toFixed(1) : "—"}</span></article></div><p class="chase-result-score">${game.runs}/${game.wickets} <small>· Target ${game.target}</small></p><button data-page="home">Exit to Home</button></section><section class="chase-final-cards"><article class="card"><h2>Batting scorecard</h2><div class="chase-table-wrap"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4</th><th>6</th><th>SR</th></tr></thead><tbody>${game.battingOrder.map((name) => { const p = game.batters.find((player) => player.name === name); return `<tr><td><span class="player-identity">${playerAvatarMarkup(name, "tiny")}${escapeHtml(name)}${p.out ? " (out)" : ""}</span></td><td>${p.runs}</td><td>${p.balls}</td><td>${p.fours}</td><td>${p.sixes}</td><td>${p.balls ? (p.runs * 100 / p.balls).toFixed(1) : "-"}</td></tr>`; }).join("")}</tbody></table></div></article><article class="card"><h2>Bowling figures</h2><div class="chase-table-wrap"><table><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead><tbody>${game.bowlers.map((p) => `<tr><td><span class="player-identity">${playerAvatarMarkup(p.name, "tiny")}${escapeHtml(p.name)}</span></td><td>${Math.floor(p.balls / 6)}.${p.balls % 6}</td><td>${p.runs}</td><td>${p.wickets}</td><td>${p.balls ? (p.runs * 6 / p.balls).toFixed(1) : "-"}</td></tr>`).join("")}</tbody></table></div></article></section>`;
+  app.querySelectorAll('[data-page="home"]').forEach((button) => {
+    button.onclick = () => show("home");
+  });
+  saveHistory("chase", "Chase Master", data, [game.userTeam, game.opponentTeam]).catch((error) => console.error(error));
 }
 
 const themePresets = {

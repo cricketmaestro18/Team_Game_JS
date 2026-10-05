@@ -1,4 +1,4 @@
-# Team Game JS
+# Cricket Mini Games
 
 ## Run locally
 
