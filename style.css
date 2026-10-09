@@ -1494,3 +1494,48 @@ select {
 
 .draft-awarded-to { min-width: 120px; color: var(--accent); font-weight: 800; white-space: nowrap; }
 .draft-awarded-to strong { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+
+/* Soft ambient motion keeps the interface lively without competing with game play. */
+body {
+  position: relative;
+  isolation: isolate;
+}
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: -22%;
+  background:
+    radial-gradient(ellipse at 18% 18%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 36%),
+    radial-gradient(ellipse at 82% 72%, color-mix(in srgb, var(--accent2) 24%, transparent), transparent 38%),
+    radial-gradient(ellipse at 55% 8%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 32%);
+  content: "";
+  filter: blur(30px);
+  opacity: .65;
+  pointer-events: none;
+  animation: ambient-drift 30s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.hero-ball {
+  animation: hero-ball-float 4.5s ease-in-out infinite;
+}
+.hero-orbit {
+  animation: hero-orbit-glow 5s ease-in-out infinite alternate;
+}
+@keyframes ambient-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to { transform: translate3d(2%, 1.5%, 0) scale(1.06); }
+}
+@keyframes hero-ball-float {
+  0%, 100% { transform: translateY(0) rotate(-18deg); }
+  50% { transform: translateY(-9px) rotate(-13deg); }
+}
+@keyframes hero-orbit-glow {
+  from { opacity: .65; transform: scale(.98); }
+  to { opacity: 1; transform: scale(1.03); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before, .hero-ball, .hero-orbit {
+    animation: none !important;
+    will-change: auto;
+  }
+}

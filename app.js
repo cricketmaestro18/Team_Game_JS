@@ -91,7 +91,7 @@ function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (cha
 function playerAvatarMarkup(name, size = "") {
   const safeName = String(name || "");
   const initials = safeName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
-  const imageUrl = `/api/player-image?v=4&name=${encodeURIComponent(safeName)}`;
+  const imageUrl = `/api/player-image?v=5&name=${encodeURIComponent(safeName)}`;
   return `<span class="player-avatar ${size}" aria-hidden="true"><span>${escapeHtml(initials)}</span><img src="${imageUrl}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="this.style.display='none'"></span>`;
 }
 

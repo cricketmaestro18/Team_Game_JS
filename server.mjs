@@ -240,6 +240,53 @@ function playerNameSimilarity(query, candidateName) {
   return 1 - distance / Math.max(queryName.length, candidate.length);
 }
 
+function semanticNameSimilarity(query, candidateName) {
+  const tokenize = (value) => {
+    const parts = normalizePlayerName(value).split(" ").filter(Boolean);
+    const tokens = [];
+    for (let index = 0; index < parts.length; index += 1) {
+      if (parts[index].length === 1 && parts[index + 1]?.length === 1) {
+        let initials = "";
+        while (parts[index]?.length === 1) initials += parts[index++];
+        tokens.push(initials);
+        index -= 1;
+      } else {
+        tokens.push(parts[index]);
+      }
+    }
+    return tokens;
+  };
+  const queryTokens = tokenize(query);
+  const candidateTokens = tokenize(candidateName);
+  if (!queryTokens.length || !candidateTokens.length) return 0;
+  if (queryTokens.join(" ") === candidateTokens.join(" ")) return 1;
+
+  const pairs = [];
+  queryTokens.forEach((left, leftIndex) => candidateTokens.forEach((right, rightIndex) => {
+    let score;
+    if (left === right) score = 1;
+    else if ((left.length === 1 && right.startsWith(left)) || (right.length === 1 && left.startsWith(right))) score = 0.92;
+    else score = 1 - editDistance(left, right) / Math.max(left.length, right.length);
+    if (score >= 0.55) pairs.push({ leftIndex, rightIndex, score });
+  }));
+  pairs.sort((a, b) => b.score - a.score);
+
+  const usedLeft = new Set();
+  const usedRight = new Set();
+  let matchedScore = 0;
+  for (const pair of pairs) {
+    if (usedLeft.has(pair.leftIndex) || usedRight.has(pair.rightIndex)) continue;
+    usedLeft.add(pair.leftIndex);
+    usedRight.add(pair.rightIndex);
+    matchedScore += pair.score;
+  }
+  const queryCoverage = matchedScore / queryTokens.length;
+  const candidateCoverage = matchedScore / candidateTokens.length;
+  return queryCoverage + candidateCoverage === 0
+    ? 0
+    : (2 * queryCoverage * candidateCoverage) / (queryCoverage + candidateCoverage);
+}
+
 async function playerCareerMatches(playerId, criteria) {
   const playerClass = criteria.startsWith("IPL") ? 6 : 11;
   const url = new URL(
@@ -249,7 +296,7 @@ async function playerCareerMatches(playerId, criteria) {
   url.search = new URLSearchParams({
     class: String(playerClass),
     template: "results",
-    type: "batting",
+    type: criteria.includes("Runs") ? "batting" : "bowling",
   }).toString();
   const html = await fetchText(url);
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(
@@ -275,38 +322,36 @@ async function playerCareerMatches(playerId, criteria) {
 }
 
 async function resolvePlayerId(html, name, criteria) {
-  const query = normalizePlayerName(name);
   const candidates = playerCandidatesFromSearch(html)
     .map((candidate) => ({
       ...candidate,
-      similarity: playerNameSimilarity(query, candidate.name),
+      similarity: semanticNameSimilarity(name, candidate.name),
     }))
-    .filter((candidate) => candidate.similarity >= 0.72)
+    .filter((candidate) => candidate.similarity >= 0.86)
     .sort((a, b) => b.similarity - a.similarity);
   if (candidates.length === 0) return null;
 
-  const bestSimilarity = candidates[0].similarity;
-  const plausible = candidates.filter(
-    (candidate) => candidate.similarity >= bestSimilarity - 0.025,
-  );
-  if (plausible.length === 1) return plausible[0].id;
+  // An exact, unique profile name is the safest match (and avoids selecting
+  // similarly named players just because they have longer careers).
+  const exact = candidates.filter((candidate) => candidate.similarity === 1);
+  if (exact.length === 1) return exact[0].id;
 
-  const scored = await Promise.all(
-    plausible.slice(0, 10).map(async (candidate) => ({
-      id: candidate.id,
-      similarity: candidate.similarity,
-      matches: await playerCareerMatches(candidate.id, criteria).catch(
-        () => -1,
-      ),
-    })),
-  );
-  scored.sort((a, b) => {
-    if (Math.abs(a.similarity - b.similarity) > 0.025) {
-      return b.similarity - a.similarity;
-    }
-    return b.matches - a.matches;
-  });
-  return scored[0].id;
+  const topSimilarity = candidates[0].similarity;
+  const plausible = candidates.filter((candidate) => candidate.similarity >= topSimilarity - 0.025);
+  if (plausible.length === 1) {
+    return plausible[0].similarity >= 0.9 ? plausible[0].id : null;
+  }
+
+  // For genuinely ambiguous names, compare appearances in the requested
+  // discipline. Never fall back to whichever search result happened to come first.
+  const scored = await Promise.all(plausible.slice(0, 10).map(async (candidate) => ({
+    ...candidate,
+    matches: await playerCareerMatches(candidate.id, criteria).catch(() => -1),
+  })));
+  scored.sort((a, b) => b.matches - a.matches || b.similarity - a.similarity);
+  const [best, second] = scored;
+  if (best.matches < 0 || (second && second.matches >= best.matches - 1)) return null;
+  return best.id;
 }
 
 async function cricinfoPlayerId(name, criteria) {
@@ -589,20 +634,14 @@ async function googlePlayerImageUrl(playerName) {
     }));
     if (!response.ok) return null;
     const html = (await response.text()).replace(/\\u003d|\u003d|\\x3d/gi, "=").replace(/\\u0026|\u0026|\\x26/gi, "&").replace(/\\\//g, "/").replace(/&amp;/g, "&");
-    const target = normalizePlayerName(playerName);
     const candidates = [];
     for (const [, tag] of html.matchAll(/<img\b[^>]*>/gi)) {
       const source = tag.match(/(?:src|data-src)=(["'])(.*?)\1/i)?.[2];
       const alt = tag.match(/alt=(["'])(.*?)\1/i)?.[2] || "";
       if (!source || !/encrypted-tbn\d*\.gstatic\.com/i.test(source)) continue;
-      const score = playerNameSimilarity(playerName, alt.replace(/<[^>]*>/g, " "));
-      candidates.push({ source, score: score >= 0.55 ? score + 2 : score });
-    }
-    const pattern = /https?:\/\/encrypted-tbn\d*\.gstatic\.com\/images[^"'<>\s\\]+/gi;
-    for (const match of html.matchAll(pattern)) {
-      const context = normalizePlayerName(html.slice(Math.max(0, match.index - 500), match.index + 180));
-      const words = target.split(" ").filter((word) => context.includes(word));
-      candidates.push({ source: match[0], score: words.length === target.split(" ").length ? 1 : 0.1 });
+      const score = semanticNameSimilarity(playerName, alt.replace(/<[^>]*>/g, " "));
+      // Ignore thumbnails whose own text does not identify the requested player.
+      if (score >= 0.8) candidates.push({ source, score });
     }
     const image = candidates.sort((a, b) => b.score - a.score)[0]?.source;
     if (!image) return null;
@@ -668,25 +707,58 @@ async function commonsPlayerImageUrl(playerName) {
   } catch { return null; }
 }
 
-async function legacyPlayerPortraitUrl(playerName) {
-  const key = normalizePlayerName(playerName);
+async function cricbuzzPortraitSearch(query) {
   try {
-    const response = await withPlayerImageLookup(() => fetch(`https://www.cricbuzz.com/api/player-search/${encodeURIComponent(playerName)}`, {
+    const response = await withPlayerImageLookup(() => fetch(`https://www.cricbuzz.com/api/player-search/${encodeURIComponent(query)}`, {
       headers: { ...requestHeaders, accept: "application/json", referer: "https://www.cricbuzz.com/profiles/" },
       signal: AbortSignal.timeout(9000),
     }));
-    if (response.ok) {
-      const payload = await response.json();
-      const players = Array.isArray(payload.player) ? payload.player : [];
-      const exact = players.find((candidate) => normalizePlayerName(candidate.name) === key);
-      const bestMatch = players.map((candidate) => ({ candidate, score: playerNameSimilarity(playerName, candidate.name) })).sort((a, b) => b.score - a.score)[0];
-      const player = exact || (bestMatch?.score >= 0.78 ? bestMatch.candidate : null);
-      // Cricbuzz uses 182026 as a shared blank-avatar portrait.
-      if (player?.faceImageId && String(player.faceImageId) !== "182026") {
-        return `https://static.cricbuzz.com/a/img/v1/256x256/i1/c${encodeURIComponent(player.faceImageId)}/i.jpg`;
-      }
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload.player) ? payload.player : [];
+  } catch { return []; }
+}
+
+async function cricbuzzProfileImageUrl(player) {
+  if (!player?.id) return null;
+  const slug = normalizePlayerName(player.name).replace(/\s+/g, "-");
+  try {
+    const response = await withPlayerImageLookup(() => fetch(`https://www.cricbuzz.com/profiles/${encodeURIComponent(player.id)}/${encodeURIComponent(slug)}`, {
+      headers: { ...requestHeaders, accept: "text/html", referer: "https://www.cricbuzz.com/profiles/" },
+      signal: AbortSignal.timeout(9000),
+    }));
+    if (!response.ok) return null;
+    const html = await response.text();
+    const image = html.match(/<meta[^>]+(?:property|name)=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1]
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image["']/i)?.[1];
+    if (!image) return null;
+    const imageUrl = new URL(image, response.url);
+    return /^(?:static\.cricbuzz\.com|www\.cricbuzz\.com)$/.test(imageUrl.hostname) ? imageUrl.href : null;
+  } catch { return null; }
+}
+
+async function legacyPlayerPortraitUrl(playerName) {
+  const key = normalizePlayerName(playerName);
+  const searchTerms = [...new Set([playerName.trim(), ...key.split(" ").filter((part) => part.length >= 3).reverse()])];
+  const seenPlayers = new Map();
+  for (const term of searchTerms) {
+    const players = await cricbuzzPortraitSearch(term);
+    for (const candidate of players) {
+      const similarity = semanticNameSimilarity(playerName, candidate.name || "");
+      if (similarity < 0.86) continue;
+      const previous = seenPlayers.get(String(candidate.id));
+      if (!previous || similarity > previous.similarity) seenPlayers.set(String(candidate.id), { ...candidate, similarity });
     }
-  } catch { /* Continue to independent public portrait sources. */ }
+    const matches = [...seenPlayers.values()].sort((a, b) => b.similarity - a.similarity || (String(a.faceImageId) === "182026") - (String(b.faceImageId) === "182026"));
+    const match = matches[0];
+    if (match && match.similarity >= 0.9) {
+      if (match.faceImageId && String(match.faceImageId) !== "182026") {
+        return `https://static.cricbuzz.com/a/img/v1/256x256/i1/c${encodeURIComponent(match.faceImageId)}/i.jpg`;
+      }
+      const profileImage = await cricbuzzProfileImageUrl(match);
+      if (profileImage) return profileImage;
+    }
+  }
   return await wikipediaPlayerImageUrl(playerName) || await commonsPlayerImageUrl(playerName);
 }
 
