@@ -1010,9 +1010,9 @@ createServer(async (req, res) => {
   if (url.pathname === "/api/history" && req.method === "POST") {
     try {
       const body = await requestBody(req);
-      if (!["draft", "stats", "chase"].includes(body.type) || !body.data || typeof body.data !== "object")
+      if (!["draft", "stats", "chase", "scorecard"].includes(body.type) || !body.data || typeof body.data !== "object")
         return sendJson(res, 400, { error: "Invalid game record." });
-      const game = { id: randomUUID(), owner: user.username, type: body.type, title: String(body.title || (body.type === "draft" ? "Team Draft" : body.type === "chase" ? "Chase Master" : "Stats Winner")), participants: Array.isArray(body.participants) ? body.participants.map(String).slice(0, 50) : [], status: "complete", playedAt: new Date().toISOString(), data: body.data };
+      const game = { id: randomUUID(), owner: user.username, type: body.type, title: String(body.title || (body.type === "draft" ? "Team Draft" : body.type === "chase" ? "Chase Master" : body.type === "scorecard" ? "Cricket Scorecard" : "Stats Winner")), participants: Array.isArray(body.participants) ? body.participants.map(String).slice(0, 50) : [], status: "complete", playedAt: new Date().toISOString(), data: body.data };
       store.history.push(game); await saveStore();
       return sendJson(res, 201, { game });
     } catch (error) { return sendJson(res, 400, { error: error.message || "Invalid game record." }); }
