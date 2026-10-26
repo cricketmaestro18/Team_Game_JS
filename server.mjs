@@ -155,12 +155,19 @@ function clean(value = "") {
 }
 
 async function fetchText(url) {
-  const response = await fetch(url, {
-    headers: requestHeaders,
-    signal: AbortSignal.timeout(15000),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: requestHeaders,
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (cause) {
+    throw new Error(`Cricinfo network request failed (${cause.message})`);
+  }
   if (!response.ok) {
-    throw new Error(`Cricinfo returned HTTP ${response.status}`);
+    const error = new Error(`Cricinfo returned HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
   return response.text();
 }
@@ -369,7 +376,8 @@ async function cricinfoPlayerId(name, criteria) {
     const html = await fetchText(searchUrl);
     const id = await resolvePlayerId(html, name, criteria);
     if (id) return id;
-  } catch {
+  } catch (error) {
+    if (error.status === 429) throw error;
     // Fall through to Statsguru search if the legacy player search is unavailable.
   }
 
@@ -387,7 +395,8 @@ async function cricinfoPlayerId(name, criteria) {
     const statsHtml = await fetchText(statsSearchUrl);
     const id = await resolvePlayerId(statsHtml, name, criteria);
     if (id) return id;
-  } catch {
+  } catch (error) {
+    if (error.status === 429) throw error;
     // Try individual name parts below; they can still identify a near-spelling.
   }
 
@@ -409,7 +418,8 @@ async function cricinfoPlayerId(name, criteria) {
       const partialHtml = await fetchText(partialSearchUrl);
       const id = await resolvePlayerId(partialHtml, name, criteria);
       if (id) return id;
-    } catch {
+    } catch (error) {
+      if (error.status === 429) throw error;
       // Continue through the remaining name parts.
     }
   }
@@ -542,6 +552,13 @@ async function cricbuzzProfileUrl(name) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.text();
   }));
+  const blockedPage = responses.some((response) =>
+    response.status === "fulfilled" &&
+    /web security|restricted category|access (?:has been )?blocked|website is blocked|web filter/i.test(response.value),
+  );
+  if (blockedPage) {
+    throw new Error("Cricbuzz access is blocked by the network security policy");
+  }
   const candidates = responses.flatMap((response) => response.status === "fulfilled" ? cricbuzzPlayerCandidates(response.value) : []);
   const queryName = normalizePlayerName(name);
   const scored = [...new Map(candidates.map((candidate) => [candidate.id, {
@@ -607,6 +624,45 @@ async function statFromCricinfo(player, criteria) {
   }).toString();
   const html = await fetchText(url);
   return statFromStatsguru(html, criteria);
+}
+
+const playerStatCache = new Map();
+const pendingPlayerStatLookups = [];
+let activePlayerStatLookups = 0;
+
+async function withPlayerStatLookup(task) {
+  if (activePlayerStatLookups >= 2) {
+    await new Promise((resolve) => pendingPlayerStatLookups.push(resolve));
+  }
+  activePlayerStatLookups += 1;
+  try {
+    return await task();
+  } finally {
+    activePlayerStatLookups -= 1;
+    pendingPlayerStatLookups.shift()?.();
+  }
+}
+
+function playerCareerStat(player, criteria) {
+  const key = `${criteria}:${normalizePlayerName(player)}`;
+  if (playerStatCache.has(key)) return playerStatCache.get(key);
+  const lookup = withPlayerStatLookup(async () => {
+    try {
+      return await statFromCricinfo(player, criteria);
+    } catch (cricinfoError) {
+      try {
+        const result = await statFromCricbuzz(player, criteria);
+        return { ...result, fallback: "Cricinfo is temporarily unavailable; used Cricbuzz." };
+      } catch (cricbuzzError) {
+        throw new Error(`Stats lookup failed. Cricinfo: ${cricinfoError.message}; Cricbuzz: ${cricbuzzError.message}`);
+      }
+    }
+  });
+  playerStatCache.set(key, lookup);
+  lookup.catch(() => {
+    if (playerStatCache.get(key) === lookup) playerStatCache.delete(key);
+  });
+  return lookup;
 }
 
 const cricbuzzPlayerImageCache = new Map();
@@ -1121,20 +1177,15 @@ createServer(async (req, res) => {
     }
 
     try {
-      const result = await statFromCricinfo(player, criteria);
+      const result = await playerCareerStat(player, criteria);
       return sendJson(res, 200, { player, criteria, ...result });
-    } catch (cricinfoError) {
-      try {
-        const result = await statFromCricbuzz(player, criteria);
-        return sendJson(res, 200, { player, criteria, ...result, fallback: "Cricinfo unavailable; used Cricbuzz." });
-      } catch (cricbuzzError) {
-        return sendJson(res, 502, {
-          player,
-          criteria,
-          value: null,
-          source: `Cricinfo failed: ${cricinfoError.message}; Cricbuzz fallback failed: ${cricbuzzError.message}`,
-        });
-      }
+    } catch (error) {
+      return sendJson(res, 502, {
+        player,
+        criteria,
+        value: null,
+        source: error.message,
+      });
     }
   }
 
