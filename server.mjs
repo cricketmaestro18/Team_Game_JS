@@ -13,6 +13,9 @@ const types = {
 const dataDir = resolve(process.env.DATA_DIR || join(root, "data"));
 const dataFile = join(dataDir, "team-game.json");
 const themeFile = join(dataDir, "themes.json");
+const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const useSupabaseStorage = Boolean(supabaseUrl && supabaseServiceKey);
 const scrypt = promisify(scryptCallback);
 const sessions = new Map();
 let store = { users: [], history: [] };
@@ -25,25 +28,65 @@ const requestHeaders = {
   "accept-language": "en-US,en;q=0.9",
 };
 
-async function loadStore() {
+function storageHeaders(extra = {}) {
+  return {
+    apikey: supabaseServiceKey,
+    authorization: `Bearer ${supabaseServiceKey}`,
+    ...extra,
+  };
+}
+
+async function readAppDocument(key, filePath) {
+  if (useSupabaseStorage) {
+    const url = `${supabaseUrl}/rest/v1/app_state?key=eq.${encodeURIComponent(key)}&select=value`;
+    const response = await fetch(url, { headers: storageHeaders(), signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error(`Supabase read failed (${response.status})`);
+    const rows = await response.json();
+    return rows[0]?.value ?? null;
+  }
   try {
-    const data = JSON.parse(await readFile(dataFile, "utf8"));
-    store = { users: data.users || [], history: data.history || [] };
-    let assignedIds = false;
-    for (const user of store.users) {
-      if (!user.id) { user.id = randomUUID(); assignedIds = true; }
-    }
-    if (assignedIds) await saveStore();
-  } catch {
-    await mkdir(dataDir, { recursive: true });
-    await saveStore();
+    return JSON.parse(await readFile(filePath, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
   }
 }
+
+async function writeAppDocument(key, filePath, value) {
+  if (useSupabaseStorage) {
+    const response = await fetch(`${supabaseUrl}/rest/v1/app_state?on_conflict=key`, {
+      method: "POST",
+      headers: storageHeaders({ "content-type": "application/json", prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ key, value }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error(`Supabase write failed (${response.status})`);
+    return;
+  }
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(filePath, JSON.stringify(value, null, 2));
+}
+
+async function loadStore() {
+  if (Boolean(supabaseUrl) !== Boolean(supabaseServiceKey)) {
+    throw new Error("Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or leave both unset.");
+  }
+  let data = await readAppDocument("team-game", dataFile);
+  const missingFromDatabase = useSupabaseStorage && !data;
+  if (!data && useSupabaseStorage) {
+    try { data = JSON.parse(await readFile(dataFile, "utf8")); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  data ||= { users: [], history: [] };
+  store = { users: data.users || [], history: data.history || [] };
+  let assignedIds = false;
+  for (const user of store.users) {
+    if (!user.id) { user.id = randomUUID(); assignedIds = true; }
+  }
+  if (assignedIds || missingFromDatabase) await saveStore();
+}
 function saveStore() {
-  storeWrite = storeWrite.then(async () => {
-    await mkdir(dataDir, { recursive: true });
-    await writeFile(dataFile, JSON.stringify(store, null, 2));
-  });
+  storeWrite = storeWrite.catch(() => {}).then(() => writeAppDocument("team-game", dataFile, store));
   return storeWrite;
 }
 async function requestBody(req) {
@@ -69,14 +112,13 @@ function canSeeGame(user, game) {
 }
 
 async function themeData(accountId, legacyOwner) {
-  let source;
-  try {
-    source = JSON.parse(await readFile(themeFile, "utf8"));
-  } catch {
-    try {
-      source = JSON.parse(await readFile(join(root, "themes.json"), "utf8"));
-    } catch {
-      source = { themes: [], active: null };
+  let source = await readAppDocument("themes", themeFile);
+  const missingFromDatabase = useSupabaseStorage && !source;
+  if (!source) {
+    try { source = JSON.parse(await readFile(themeFile, "utf8")); }
+    catch {
+      try { source = JSON.parse(await readFile(join(root, "themes.json"), "utf8")); }
+      catch { source = { themes: [], active: null }; }
     }
   }
 
@@ -125,10 +167,7 @@ async function themeData(accountId, legacyOwner) {
     changed = true;
   }
 
-  if (changed) {
-    await mkdir(dataDir, { recursive: true });
-    await writeFile(themeFile, JSON.stringify(data, null, 2));
-  }
+  if (changed || missingFromDatabase) await writeAppDocument("themes", themeFile, data);
   return data;
 }
 
@@ -1130,7 +1169,7 @@ createServer(async (req, res) => {
         colors: payload.colors,
       });
       data.activeByUser[user.id] = payload.colors;
-      await writeFile(themeFile, JSON.stringify(data, null, 2));
+      await writeAppDocument("themes", themeFile, data);
       return sendJson(res, 201, { colors: data.activeByUser[user.id] });
     } catch {
       res.writeHead(400);
@@ -1158,7 +1197,7 @@ createServer(async (req, res) => {
       return res.end("Invalid theme");
     }
     data.activeByUser[user.id] = colors;
-    await writeFile(themeFile, JSON.stringify(data, null, 2));
+    await writeAppDocument("themes", themeFile, data);
     res.writeHead(204);
     return res.end();
   }
