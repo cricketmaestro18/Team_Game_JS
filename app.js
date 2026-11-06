@@ -219,6 +219,14 @@ function draftStart() {
     startDraft(names, f.get("type")).catch((error) => alert(error.message));
   };
 }
+function fisherYatesShuffle(items) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const otherIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[otherIndex]] = [shuffled[otherIndex], shuffled[index]];
+  }
+  return shuffled;
+}
 async function startDraft(names, type) {
   const roles =
     type === "xi"
@@ -232,18 +240,27 @@ async function startDraft(names, type) {
           "Open Bowl",
           "Death Bowl",
         ];
-  const pool = await fetch("/api/draft-players").then(async (response) => {
+  const pickCount = names.length * roles.length;
+  const pool = await fetch(`/api/draft-players?count=${pickCount}`).then(async (response) => {
     if (!response.ok) throw new Error("The draft player list could not be loaded.");
     return response.json();
   });
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const uniquePool = [...new Map(
+    pool
+      .filter((player) => typeof player === "string" && player.trim())
+      .map((player) => [player.trim().replace(/\s+/g, " ").toLocaleLowerCase(), player.trim().replace(/\s+/g, " ")]),
+  ).values()];
+  if (uniquePool.length < pickCount) {
+    throw new Error(`This draft needs ${pickCount} unique players, but the player list has only ${uniquePool.length}.`);
+  }
+  const shuffled = fisherYatesShuffle(uniquePool);
   const state = {
     names,
     roles,
     type,
     picks: {},
     turn: 0,
-    draws: shuffled.slice(0, names.length * roles.length),
+    draws: shuffled.slice(0, pickCount),
     points: {},
   };
   draftGame(state);

@@ -51,4 +51,4 @@ The app continues using local JSON files for development when both Supabase vari
 
 ## Maintain the Team Draft player list
 
-Edit [`server/draft-players.json`](server/draft-players.json). Team Draft loads its complete player pool from that file each time a draft starts; players absent from the file cannot appear in a new game.
+Edit [`server/draft-players.json`](server/draft-players.json) to manage the roster. Team Draft keeps its alternating bottle/round state in [`server/draft-players-alternate.json`](server/draft-players-alternate.json): each new draft uses exactly seven names per participant, taking any shortfall from the other bottle and reversing direction when needed. Names used in the immediately previous draft are skipped. If you reset the alternate file to its initial empty state, rotation starts over from the roster.

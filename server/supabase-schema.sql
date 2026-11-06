@@ -5,4 +5,6 @@ create table if not exists public.app_state (
 );
 
 alter table public.app_state enable row level security;
+grant usage on schema public to service_role;
 grant select, insert, update, delete on public.app_state to service_role;
+notify pgrst, 'reload schema';

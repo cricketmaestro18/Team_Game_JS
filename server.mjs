@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { randomUUID, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { extname, join, resolve } from "node:path";
@@ -21,6 +21,9 @@ const sessions = new Map();
 let store = { users: [], history: [] };
 let storeWrite = Promise.resolve();
 const playerIndexFile = join(root, "server/player-index.json");
+const draftPlayersFile = join(root, "server/draft-players.json");
+const draftAlternateFile = join(root, "server/draft-players-alternate.json");
+let draftPoolWrite = Promise.resolve();
 const cricinfoBaseUrl = "https://www.cricinfo.com";
 const requestHeaders = {
   "user-agent":
@@ -960,6 +963,72 @@ function sendJson(res, status, payload) {
 
 await loadStore();
 
+async function getDraftPlayersForRound(requestedCount) {
+  const operation = draftPoolWrite.then(async () => {
+    const master = JSON.parse(await readFile(draftPlayersFile, "utf8"));
+    if (!Array.isArray(master) || master.some((name) => typeof name !== "string")) throw new Error("Invalid draft player list");
+    const clean = (items) => [...new Map(items.filter((name) => typeof name === "string" && name.trim()).map((name) => {
+      const value = name.trim().replace(/\s+/g, " ");
+      return [value.toLocaleLowerCase(), value];
+    })).values()];
+    const roster = clean(master);
+    let state;
+    try {
+      state = JSON.parse(await readFile(draftAlternateFile, "utf8"));
+    } catch {
+      state = { bottles: { a: roster, b: [] }, active: "a", lastBatch: [] };
+    }
+    if (!state || !state.bottles || !Array.isArray(state.bottles.a) || !Array.isArray(state.bottles.b)) {
+      state = { bottles: { a: roster, b: [] }, active: "a", lastBatch: [] };
+    }
+    const keys = new Set(roster.map((name) => name.toLocaleLowerCase()));
+    for (const bottle of ["a", "b"]) state.bottles[bottle] = clean(state.bottles[bottle]).filter((name) => keys.has(name.toLocaleLowerCase()));
+    const stored = new Set([...state.bottles.a, ...state.bottles.b].map((name) => name.toLocaleLowerCase()));
+    state.bottles[state.active === "b" ? "b" : "a"].push(...roster.filter((name) => !stored.has(name.toLocaleLowerCase())));
+    state.active = state.active === "b" ? "b" : "a";
+    state.lastBatch = Array.isArray(state.lastBatch) ? state.lastBatch : [];
+
+    const count = Math.max(1, Math.floor(requestedCount) || 1);
+    const batch = [];
+    const recent = new Set(state.lastBatch.map((name) => name.toLocaleLowerCase()));
+    const takeFromBottle = (sourceName, needed) => {
+      const destinationName = sourceName === "a" ? "b" : "a";
+      const excluded = new Set([...recent, ...batch.map((name) => name.toLocaleLowerCase())]);
+      const candidates = fisherYatesShuffle(state.bottles[sourceName].filter((name) => !excluded.has(name.toLocaleLowerCase())));
+      const selected = candidates.slice(0, needed);
+      for (const name of selected) {
+        state.bottles[sourceName].splice(state.bottles[sourceName].indexOf(name), 1);
+        state.bottles[destinationName].push(name);
+        batch.push(name);
+      }
+    };
+    const activeBottle = state.active;
+    takeFromBottle(activeBottle, count);
+    if (batch.length < count) {
+      // The active bottle ran short; reverse direction and top up from its counterpart.
+      state.active = activeBottle === "a" ? "b" : "a";
+      takeFromBottle(state.active, count - batch.length);
+    }
+    if (batch.length < count) throw new Error("The draft player list does not contain enough distinct names.");
+    state.lastBatch = batch;
+    const tempFile = `${draftAlternateFile}.tmp`;
+    await writeFile(tempFile, JSON.stringify(state, null, 2));
+    await rename(tempFile, draftAlternateFile);
+    return batch;
+  });
+  draftPoolWrite = operation.catch(() => {});
+  return operation;
+}
+
+function fisherYatesShuffle(items) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const otherIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[otherIndex]] = [shuffled[otherIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const themeOwner = owner(req);
@@ -1085,8 +1154,7 @@ createServer(async (req, res) => {
   if (url.pathname === "/api/draft-players" && req.method === "GET") {
     res.setHeader("Cache-Control", "no-store");
     try {
-      const players = JSON.parse(await readFile(join(root, "server/draft-players.json"), "utf8"));
-      if (!Array.isArray(players) || players.some((name) => typeof name !== "string")) throw new Error("Invalid list");
+      const players = await getDraftPlayersForRound(Number(url.searchParams.get("count")));
       return sendJson(res, 200, players);
     } catch {
       return sendJson(res, 500, { error: "The draft player list is unavailable." });
